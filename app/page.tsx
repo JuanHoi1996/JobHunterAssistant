@@ -3,6 +3,28 @@
 import { useMemo, useState } from "react";
 
 type TabId = "overview" | "resume" | "letter" | "progress" | "interview";
+type ScreenId = "list" | "detail";
+type JobStatus = "待投递" | "已投递" | "面试中" | "Offer" | "已结束";
+type CaptureMethod = "岗位链接" | "JD 文本" | "岗位截图" | "插件保存";
+
+type JobRecord = {
+  id: string;
+  mark: string;
+  tone: "blue" | "orange" | "green" | "violet";
+  company: string;
+  title: string;
+  location: string;
+  employment: string;
+  category: string;
+  discoverySource: string;
+  captureMethod: CaptureMethod;
+  sourceHost: string;
+  status: JobStatus;
+  savedLabel: string;
+  ageHours: number;
+  materials: string;
+  applicationMethod?: string;
+};
 
 const tabs: { id: TabId; label: string; count?: number }[] = [
   { id: "overview", label: "岗位概览" },
@@ -20,15 +42,88 @@ const navItems = [
   { icon: "◇", label: "个人档案" },
 ];
 
-const jobs = [
-  { company: "字", title: "商业产品运营", meta: "准备中", tone: "blue" },
-  { company: "米", title: "法务培训生", meta: "已投递", tone: "orange" },
-  { company: "美", title: "用户运营", meta: "待投递", tone: "green" },
+const initialJobs: JobRecord[] = [
+  {
+    id: "bytedance-ops",
+    mark: "字",
+    tone: "blue",
+    company: "字节跳动",
+    title: "商业产品运营（2027 届校招）",
+    location: "上海",
+    employment: "全职",
+    category: "产品 / 运营",
+    discoverySource: "企业官网",
+    captureMethod: "岗位链接",
+    sourceHost: "jobs.bytedance.com",
+    status: "待投递",
+    savedLabel: "今天 10:42",
+    ageHours: 4,
+    materials: "简历已优化 · 文案待确认",
+  },
+  {
+    id: "meituan-user-ops",
+    mark: "美",
+    tone: "green",
+    company: "美团",
+    title: "用户运营实习生",
+    location: "北京",
+    employment: "实习",
+    category: "运营",
+    discoverySource: "微信公众号",
+    captureMethod: "岗位截图",
+    sourceHost: "岗位截图",
+    status: "待投递",
+    savedLabel: "昨天 08:30",
+    ageHours: 31,
+    materials: "JD 已分析 · 简历待优化",
+  },
+  {
+    id: "xiaomi-legal",
+    mark: "米",
+    tone: "orange",
+    company: "小米",
+    title: "法务培训生",
+    location: "北京",
+    employment: "全职",
+    category: "法务",
+    discoverySource: "学校就业网",
+    captureMethod: "JD 文本",
+    sourceHost: "学校就业网",
+    status: "已投递",
+    savedLabel: "7 月 15 日",
+    ageHours: 52,
+    materials: "岗位专属简历 V1",
+    applicationMethod: "企业官网",
+  },
+  {
+    id: "tencent-product",
+    mark: "腾",
+    tone: "violet",
+    company: "腾讯",
+    title: "产品策划培训生",
+    location: "深圳",
+    employment: "全职",
+    category: "产品",
+    discoverySource: "朋友推荐",
+    captureMethod: "插件保存",
+    sourceHost: "join.qq.com",
+    status: "面试中",
+    savedLabel: "7 月 12 日",
+    ageHours: 126,
+    materials: "一面复盘已完成",
+    applicationMethod: "内推",
+  },
 ];
 
 export default function Home() {
+  const [screen, setScreen] = useState<ScreenId>("list");
   const [activeTab, setActiveTab] = useState<TabId>("overview");
-  const [status, setStatus] = useState("准备中");
+  const [jobRecords, setJobRecords] = useState<JobRecord[]>(initialJobs);
+  const [selectedJobId, setSelectedJobId] = useState(initialJobs[0].id);
+  const [filter, setFilter] = useState("全部");
+  const [newJobOpen, setNewJobOpen] = useState(false);
+  const [submittingJobId, setSubmittingJobId] = useState<string | null>(null);
+  const [reminderDismissed, setReminderDismissed] = useState(false);
   const [toast, setToast] = useState("");
 
   const showToast = (message: string) => {
@@ -36,10 +131,34 @@ export default function Home() {
     window.setTimeout(() => setToast(""), 2400);
   };
 
-  const activeLabel = useMemo(
-    () => tabs.find((tab) => tab.id === activeTab)?.label ?? "岗位概览",
-    [activeTab],
+  const selectedJob = jobRecords.find((job) => job.id === selectedJobId) ?? jobRecords[0];
+  const overdueJobs = jobRecords.filter((job) => job.status === "待投递" && job.ageHours >= 24);
+  const filteredJobs = useMemo(
+    () => filter === "全部" ? jobRecords : jobRecords.filter((job) => job.status === filter),
+    [filter, jobRecords],
   );
+  const activeLabel = screen === "list"
+    ? "岗位列表"
+    : tabs.find((tab) => tab.id === activeTab)?.label ?? "岗位概览";
+
+  const openJob = (jobId: string) => {
+    setSelectedJobId(jobId);
+    setActiveTab("overview");
+    setScreen("detail");
+  };
+
+  const updateJobStatus = (jobId: string, status: JobStatus, applicationMethod?: string) => {
+    setJobRecords((current) => current.map((job) => (
+      job.id === jobId ? { ...job, status, applicationMethod: applicationMethod ?? job.applicationMethod } : job
+    )));
+  };
+
+  const addJob = (job: JobRecord) => {
+    setJobRecords((current) => [job, ...current]);
+    setFilter("全部");
+    setNewJobOpen(false);
+    showToast("岗位已收录，并自动标记为待投递");
+  };
 
   return (
     <div className="app-shell">
@@ -54,7 +173,11 @@ export default function Home() {
 
         <nav className="main-nav" aria-label="主导航">
           {navItems.map((item) => (
-            <button className={item.active ? "nav-item active" : "nav-item"} key={item.label}>
+            <button
+              className={item.active ? "nav-item active" : "nav-item"}
+              key={item.label}
+              onClick={() => item.label === "岗位管理" && setScreen("list")}
+            >
               <span className="nav-icon" aria-hidden="true">{item.icon}</span>
               <span>{item.label}</span>
               {item.badge && <span className="nav-badge">{item.badge}</span>}
@@ -65,15 +188,19 @@ export default function Home() {
         <div className="sidebar-section">
           <div className="section-label">
             <span>最近岗位</span>
-            <button aria-label="添加岗位">＋</button>
+            <button aria-label="添加岗位" onClick={() => setNewJobOpen(true)}>＋</button>
           </div>
           <div className="recent-jobs">
-            {jobs.map((job, index) => (
-              <button className={index === 0 ? "recent-job selected" : "recent-job"} key={job.title}>
-                <span className={`mini-logo ${job.tone}`}>{job.company}</span>
+            {jobRecords.slice(0, 3).map((job) => (
+              <button
+                className={selectedJobId === job.id && screen === "detail" ? "recent-job selected" : "recent-job"}
+                key={job.id}
+                onClick={() => openJob(job.id)}
+              >
+                <span className={`mini-logo ${job.tone}`}>{job.mark}</span>
                 <span className="recent-copy">
                   <strong>{job.title}</strong>
-                  <small>{job.meta}</small>
+                  <small>{job.status}</small>
                 </span>
               </button>
             ))}
@@ -93,73 +220,325 @@ export default function Home() {
       <main className="workspace">
         <header className="topbar">
           <div className="breadcrumbs">
-            <span>岗位管理</span><b>/</b><strong>{activeLabel}</strong>
+            <button onClick={() => setScreen("list")}>岗位管理</button><b>/</b><strong>{activeLabel}</strong>
           </div>
           <div className="top-actions">
             <button className="icon-button" aria-label="搜索">⌕</button>
             <button className="icon-button notification" aria-label="通知">○<i /></button>
-            <button className="primary-button compact" onClick={() => showToast("已打开新建岗位窗口")}>＋ 新建岗位</button>
+            <button className="primary-button compact" onClick={() => setNewJobOpen(true)}>＋ 新建岗位</button>
           </div>
         </header>
 
-        <section className="job-hero">
-          <div className="company-logo">字</div>
-          <div className="job-title-block">
-            <div className="eyebrow-line">
-              <span className="channel-pill">官网校招</span>
-              <span>更新于 12 分钟前</span>
-            </div>
-            <h1>商业产品运营（2027 届校招）</h1>
-            <div className="job-meta">
-              <strong>字节跳动</strong><span>上海</span><span>全职</span><span>产品 / 运营</span>
-            </div>
-          </div>
-          <div className="hero-controls">
-            <label className="status-select">
-              <span className={`status-dot ${status === "已投递" ? "sent" : ""}`} />
-              <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="投递状态">
-                <option>收藏</option>
-                <option>准备中</option>
-                <option>待投递</option>
-                <option>已投递</option>
-                <option>面试中</option>
-                <option>Offer</option>
-              </select>
-            </label>
-            <button className="more-button" aria-label="更多操作">•••</button>
-          </div>
-        </section>
+        {screen === "list" ? (
+          <JobList
+            jobs={filteredJobs}
+            allJobs={jobRecords}
+            overdueJobs={overdueJobs}
+            filter={filter}
+            reminderDismissed={reminderDismissed}
+            onFilter={setFilter}
+            onDismissReminder={() => setReminderDismissed(true)}
+            onNew={() => setNewJobOpen(true)}
+            onOpen={openJob}
+            onMarkSubmitted={setSubmittingJobId}
+          />
+        ) : (
+          <>
+            <section className="job-hero">
+              <div className={`company-logo ${selectedJob.tone}`}>{selectedJob.mark}</div>
+              <div className="job-title-block">
+                <div className="eyebrow-line">
+                  <span className="channel-pill">来自：{selectedJob.discoverySource}</span>
+                  <span>保存于 {selectedJob.savedLabel}</span>
+                </div>
+                <h1>{selectedJob.title}</h1>
+                <div className="job-meta">
+                  <strong>{selectedJob.company}</strong><span>{selectedJob.location}</span><span>{selectedJob.employment}</span><span>{selectedJob.category}</span>
+                </div>
+              </div>
+              <div className="hero-controls">
+                <label className="status-select">
+                  <span className={`status-dot ${selectedJob.status === "已投递" ? "sent" : ""}`} />
+                  <select
+                    value={selectedJob.status}
+                    onChange={(event) => updateJobStatus(selectedJob.id, event.target.value as JobStatus)}
+                    aria-label="投递状态"
+                  >
+                    <option>待投递</option>
+                    <option>已投递</option>
+                    <option>面试中</option>
+                    <option>Offer</option>
+                    <option>已结束</option>
+                  </select>
+                </label>
+                <button className="more-button" aria-label="更多操作">•••</button>
+              </div>
+            </section>
 
-        <div className="tab-bar" role="tablist" aria-label="岗位工作区">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              className={activeTab === tab.id ? "tab active" : "tab"}
-              onClick={() => setActiveTab(tab.id)}
-              role="tab"
-              aria-selected={activeTab === tab.id}
-            >
-              {tab.label}
-              {tab.count && <span>{tab.count}</span>}
-            </button>
-          ))}
-        </div>
+            <div className="tab-bar" role="tablist" aria-label="岗位工作区">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  className={activeTab === tab.id ? "tab active" : "tab"}
+                  onClick={() => setActiveTab(tab.id)}
+                  role="tab"
+                  aria-selected={activeTab === tab.id}
+                >
+                  {tab.label}
+                  {tab.count && <span>{tab.count}</span>}
+                </button>
+              ))}
+            </div>
 
-        <div className="workspace-body">
-          {activeTab === "overview" && <Overview onAction={showToast} onOpenTab={setActiveTab} />}
-          {activeTab === "resume" && <ResumePanel onAction={showToast} />}
-          {activeTab === "letter" && <LetterPanel onAction={showToast} />}
-          {activeTab === "progress" && <ProgressPanel status={status} setStatus={setStatus} onAction={showToast} />}
-          {activeTab === "interview" && <InterviewPanel onAction={showToast} />}
-        </div>
+            <div className="workspace-body">
+              {activeTab === "overview" && <Overview job={selectedJob} onAction={showToast} onOpenTab={setActiveTab} />}
+              {activeTab === "resume" && <ResumePanel onAction={showToast} />}
+              {activeTab === "letter" && <LetterPanel onAction={showToast} />}
+              {activeTab === "progress" && (
+                <ProgressPanel
+                  status={selectedJob.status}
+                  setStatus={(nextStatus) => updateJobStatus(selectedJob.id, nextStatus as JobStatus)}
+                  onAction={showToast}
+                />
+              )}
+              {activeTab === "interview" && <InterviewPanel onAction={showToast} />}
+            </div>
+          </>
+        )}
       </main>
 
+      {newJobOpen && <NewJobDialog onClose={() => setNewJobOpen(false)} onCreate={addJob} />}
+      {submittingJobId && (
+        <ApplicationMethodDialog
+          job={jobRecords.find((job) => job.id === submittingJobId) ?? jobRecords[0]}
+          onClose={() => setSubmittingJobId(null)}
+          onConfirm={(method) => {
+            updateJobStatus(submittingJobId, "已投递", method);
+            setSubmittingJobId(null);
+            showToast("已标记为已投递，并记录投递方式");
+          }}
+        />
+      )}
       {toast && <div className="toast" role="status"><span>✓</span>{toast}</div>}
     </div>
   );
 }
 
-function Overview({ onAction, onOpenTab }: { onAction: (message: string) => void; onOpenTab: (tab: TabId) => void }) {
+function JobList({
+  jobs,
+  allJobs,
+  overdueJobs,
+  filter,
+  reminderDismissed,
+  onFilter,
+  onDismissReminder,
+  onNew,
+  onOpen,
+  onMarkSubmitted,
+}: {
+  jobs: JobRecord[];
+  allJobs: JobRecord[];
+  overdueJobs: JobRecord[];
+  filter: string;
+  reminderDismissed: boolean;
+  onFilter: (value: string) => void;
+  onDismissReminder: () => void;
+  onNew: () => void;
+  onOpen: (jobId: string) => void;
+  onMarkSubmitted: (jobId: string) => void;
+}) {
+  const filters = ["全部", "待投递", "已投递", "面试中", "Offer", "已结束"];
+  const counts = {
+    待投递: allJobs.filter((job) => job.status === "待投递").length,
+    已投递: allJobs.filter((job) => job.status === "已投递").length,
+    面试中: allJobs.filter((job) => job.status === "面试中").length,
+  };
+
+  return (
+    <div className="job-list-page">
+      <section className="list-heading">
+        <div>
+          <span className="kicker">个人求职进度</span>
+          <h1>我的岗位</h1>
+          <p>把看到的机会先收进来，再一步步推进到实际投递。</p>
+        </div>
+        <button className="primary-button" onClick={onNew}>＋ 收录新岗位</button>
+      </section>
+
+      <section className="stats-strip" aria-label="岗位状态概览">
+        <div><span>全部岗位</span><strong>{allJobs.length}</strong><small>已建立个人记录</small></div>
+        <div><span>待投递</span><strong>{counts.待投递}</strong><small>需要继续准备</small></div>
+        <div><span>已投递</span><strong>{counts.已投递}</strong><small>等待后续进展</small></div>
+        <div><span>面试中</span><strong>{counts.面试中}</strong><small>持续准备与复盘</small></div>
+      </section>
+
+      {!reminderDismissed && overdueJobs.length > 0 && (
+        <section className="reminder-banner" role="status">
+          <div className="reminder-icon">⌛</div>
+          <div>
+            <strong>你有 {overdueJobs.length} 个岗位已收录超过 24 小时，仍待投递。</strong>
+            <p>建议今天完成材料准备或确认是否继续申请。</p>
+          </div>
+          <button className="secondary-button" onClick={() => onFilter("待投递")}>查看待投递岗位</button>
+          <button className="quiet-button" onClick={onDismissReminder}>稍后提醒</button>
+        </section>
+      )}
+
+      <section className="job-list-card card">
+        <div className="list-toolbar">
+          <div className="filter-tabs" aria-label="筛选岗位状态">
+            {filters.map((item) => (
+              <button key={item} className={filter === item ? "active" : ""} onClick={() => onFilter(item)}>{item}</button>
+            ))}
+          </div>
+          <label className="list-search"><span>⌕</span><input aria-label="搜索岗位" placeholder="搜索公司或岗位" /></label>
+        </div>
+
+        <div className="job-table-head">
+          <span>岗位</span><span>来源与时间</span><span>材料准备</span><span>状态</span><span>操作</span>
+        </div>
+        <div className="job-rows">
+          {jobs.map((job) => {
+            const overdue = job.status === "待投递" && job.ageHours >= 24;
+            return (
+              <article className={overdue ? "job-row overdue" : "job-row"} key={job.id}>
+                <div className="job-cell-main">
+                  <span className={`table-logo ${job.tone}`}>{job.mark}</span>
+                  <div><strong>{job.title}</strong><p>{job.company} · {job.location} · {job.category}</p></div>
+                </div>
+                <div className="source-cell">
+                  <strong>{job.discoverySource}</strong>
+                  <span>{job.captureMethod} · 保存于 {job.savedLabel}</span>
+                  {overdue && <em>已收录 {job.ageHours} 小时</em>}
+                </div>
+                <div className="material-cell"><span>{job.materials}</span><i><b style={{ width: job.status === "待投递" ? "54%" : "100%" }} /></i></div>
+                <div><span className={`status-chip status-${job.status}`}>{job.status}</span>{job.applicationMethod && <small className="application-method">通过{job.applicationMethod}</small>}</div>
+                <div className="row-actions">
+                  <button className="text-button" onClick={() => onOpen(job.id)}>进入工作区</button>
+                  {job.status === "待投递" && <button className="mini-primary" onClick={() => onMarkSubmitted(job.id)}>标记已投递</button>}
+                </div>
+              </article>
+            );
+          })}
+          {jobs.length === 0 && <div className="empty-list"><strong>暂无该状态的岗位</strong><span>切换筛选条件或收录一个新岗位。</span></div>}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (job: JobRecord) => void }) {
+  const [step, setStep] = useState<1 | 2>(1);
+  const [method, setMethod] = useState<CaptureMethod>("岗位链接");
+  const [fileName, setFileName] = useState("");
+  const [company, setCompany] = useState("腾讯");
+  const [title, setTitle] = useState("产品运营实习生");
+  const [location, setLocation] = useState("深圳");
+  const [employment, setEmployment] = useState("实习");
+  const [category, setCategory] = useState("产品 / 运营");
+  const [source, setSource] = useState("企业官网");
+  const methods: { id: CaptureMethod; icon: string; title: string; description: string }[] = [
+    { id: "岗位链接", icon: "↗", title: "粘贴岗位链接", description: "适合企业官网和公开招聘页面" },
+    { id: "JD 文本", icon: "文", title: "粘贴 JD 文本", description: "最稳定的通用导入方式" },
+    { id: "岗位截图", icon: "图", title: "上传岗位截图", description: "适合公众号、实习群和登录页面" },
+    { id: "插件保存", icon: "插", title: "插件一键保存", description: "读取当前已打开的岗位页面" },
+  ];
+
+  const beginRecognition = () => {
+    if (method === "岗位截图") setSource("实习群 / 求职群");
+    if (method === "JD 文本") setSource("其他");
+    if (method === "插件保存") setSource("BOSS直聘");
+    setStep(2);
+  };
+
+  const create = () => onCreate({
+    id: `job-${Date.now()}`,
+    mark: company.slice(0, 1) || "新",
+    tone: "violet",
+    company,
+    title,
+    location,
+    employment,
+    category,
+    discoverySource: source,
+    captureMethod: method,
+    sourceHost: method === "岗位链接" ? "用户提供的岗位链接" : method,
+    status: "待投递",
+    savedLabel: "刚刚",
+    ageHours: 0,
+    materials: "待分析 JD",
+  });
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="modal-panel new-job-modal" role="dialog" aria-modal="true" aria-labelledby="new-job-title">
+        <div className="modal-header">
+          <div><span>新增岗位 · {step}/2</span><h2 id="new-job-title">{step === 1 ? "先把岗位收进来" : "确认岗位信息"}</h2></div>
+          <button className="modal-close" onClick={onClose} aria-label="关闭">×</button>
+        </div>
+
+        {step === 1 ? (
+          <>
+            <p className="modal-intro">选择最方便的方式。识别完成后，你还可以检查和修改所有字段。</p>
+            <div className="capture-methods">
+              {methods.map((item) => (
+                <button key={item.id} className={method === item.id ? "capture-method active" : "capture-method"} onClick={() => setMethod(item.id)}>
+                  <span>{item.icon}</span><strong>{item.title}</strong><small>{item.description}</small><i>{method === item.id ? "✓" : ""}</i>
+                </button>
+              ))}
+            </div>
+            <div className="capture-input">
+              {method === "岗位链接" && <label><span>岗位链接</span><input defaultValue="https://jobs.example.com/position/2027-ops" /></label>}
+              {method === "JD 文本" && <label><span>岗位 JD</span><textarea defaultValue="负责商业产品的用户研究、数据分析与跨团队项目推进……" /></label>}
+              {method === "岗位截图" && (
+                <label className="upload-zone">
+                  <input type="file" accept="image/*" onChange={(event) => setFileName(event.target.files?.[0]?.name ?? "")} />
+                  <span>▧</span><strong>{fileName || "点击选择岗位截图"}</strong><small>支持 PNG、JPG；上传前可先裁剪或打码</small>
+                </label>
+              )}
+              {method === "插件保存" && <div className="extension-note"><span>插</span><div><strong>在岗位页面打开“向前”插件</strong><p>插件只读取当前页面，不需要你的招聘网站密码。</p></div></div>}
+            </div>
+            <div className="privacy-line"><span>✓</span>不会要求招聘网站账号、密码、验证码或 Cookie</div>
+            <div className="modal-footer"><button className="secondary-button" onClick={onClose}>取消</button><button className="primary-button" onClick={beginRecognition}>识别岗位信息 →</button></div>
+          </>
+        ) : (
+          <>
+            <div className="recognition-summary"><span>✓</span><div><strong>已提取 7 个岗位字段</strong><p>请确认标记为“需核对”的内容，再创建岗位记录。</p></div><em>{method}</em></div>
+            <div className="confirm-grid">
+              <label><span>公司名称 <b>已识别</b></span><input value={company} onChange={(event) => setCompany(event.target.value)} /></label>
+              <label><span>岗位名称 <b>已识别</b></span><input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+              <label><span>工作地点 <em>需核对</em></span><input value={location} onChange={(event) => setLocation(event.target.value)} /></label>
+              <label><span>工作性质</span><select value={employment} onChange={(event) => setEmployment(event.target.value)}><option>实习</option><option>全职</option><option>兼职</option></select></label>
+              <label><span>岗位类别</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option>产品 / 运营</option><option>运营</option><option>产品</option><option>法务</option><option>其他</option></select></label>
+              <label><span>你在哪里看到这个岗位？</span><select value={source} onChange={(event) => setSource(event.target.value)}><option>企业官网</option><option>BOSS直聘</option><option>微信公众号</option><option>实习群 / 求职群</option><option>学校就业网</option><option>小红书</option><option>朋友推荐</option><option>内推</option><option>其他</option></select></label>
+            </div>
+            <div className="jd-preview"><div><strong>JD 摘要</strong><span>保存原文</span></div><p>负责目标用户研究与需求洞察，结合业务数据制定运营策略；协同产品、销售及内容团队推动项目落地，并持续复盘优化。</p></div>
+            <div className="default-status-note"><span>待投递</span><p>创建后自动进入待投递状态；超过 24 小时仍未投递时会在工作台提醒。</p></div>
+            <div className="modal-footer"><button className="secondary-button" onClick={() => setStep(1)}>← 返回修改</button><button className="primary-button" onClick={create}>确认并创建岗位</button></div>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ApplicationMethodDialog({ job, onClose, onConfirm }: { job: JobRecord; onClose: () => void; onConfirm: (method: string) => void }) {
+  const [method, setMethod] = useState("企业官网");
+  const methods = ["企业官网", "BOSS直聘", "邮件", "内推", "其他", "暂不记录"];
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="modal-panel method-modal" role="dialog" aria-modal="true" aria-labelledby="method-title">
+        <div className="modal-header"><div><span>标记已投递</span><h2 id="method-title">通过哪里提交的？</h2></div><button className="modal-close" onClick={onClose}>×</button></div>
+        <p className="modal-intro">{job.company} · {job.title}</p>
+        <div className="method-options">{methods.map((item) => <button key={item} className={method === item ? "active" : ""} onClick={() => setMethod(item)}><span>{method === item ? "✓" : ""}</span>{item}</button>)}</div>
+        <p className="method-hint">投递方式仅用于后续查进度和复盘，不填写也可以继续。</p>
+        <div className="modal-footer"><button className="secondary-button" onClick={onClose}>取消</button><button className="primary-button" onClick={() => onConfirm(method === "暂不记录" ? "" : method)}>确认已投递</button></div>
+      </section>
+    </div>
+  );
+}
+
+function Overview({ job, onAction, onOpenTab }: { job: JobRecord; onAction: (message: string) => void; onOpenTab: (tab: TabId) => void }) {
   return (
     <div className="overview-grid">
       <div className="main-column">
@@ -256,7 +635,7 @@ function Overview({ onAction, onOpenTab }: { onAction: (message: string) => void
 
         <section className="card source-card">
           <div className="small-card-title"><strong>岗位来源</strong><button onClick={() => onAction("已复制岗位链接")}>复制链接</button></div>
-          <div className="source-content"><span className="source-logo">字</span><div><strong>字节跳动校园招聘</strong><small>jobs.bytedance.com · JD 已同步</small></div></div>
+          <div className="source-content"><span className="source-logo">{job.mark}</span><div><strong>{job.discoverySource}</strong><small>{job.sourceHost} · 保存时的岗位快照</small></div></div>
           <div className="privacy-note"><span>▣</span>只保存本岗位页面，不读取其他浏览记录</div>
         </section>
       </aside>
