@@ -28,6 +28,7 @@ type JobRecord = {
   jdSummary?: string;
   rawJd?: string;
   contactEmail?: string;
+  ccEmail?: string;
   business?: string;
 };
 
@@ -446,7 +447,9 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
   const [source, setSource] = useState("其他");
   const [summary, setSummary] = useState("");
   const [contactEmail, setContactEmail] = useState("");
+  const [ccEmail, setCcEmail] = useState("");
   const [business, setBusiness] = useState("");
+  const [fieldEvidence, setFieldEvidence] = useState({ company: "", title: "", location: "", employment: "", category: "", email: "", ccEmail: "" });
   const [recognizedCount, setRecognizedCount] = useState(0);
   const [recognitionMode, setRecognitionMode] = useState<"parsed" | "manual">("manual");
   const [formError, setFormError] = useState("");
@@ -474,7 +477,9 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
       setCategory(result.category);
       setSummary(result.summary);
       setContactEmail(result.email);
+      setCcEmail(result.ccEmail);
       setBusiness(result.business);
+      setFieldEvidence(result.evidence);
       setRecognizedCount([
         result.company,
         result.title,
@@ -483,6 +488,7 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
         result.category !== "其他" ? result.category : "",
         result.business,
         result.email,
+        result.ccEmail,
       ].filter(Boolean).length);
       setRecognitionMode("parsed");
       setStep(2);
@@ -504,7 +510,9 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
     setEmployment("");
     setCategory("其他");
     setContactEmail("");
+    setCcEmail("");
     setBusiness("");
+    setFieldEvidence({ company: "", title: "", location: "", employment: "", category: "", email: "", ccEmail: "" });
     setRecognizedCount(0);
     setRecognitionMode("manual");
     setSummary(
@@ -549,6 +557,7 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
       jdSummary: summary,
       rawJd: method === "JD 文本" ? jdText.trim() : undefined,
       contactEmail: contactEmail || undefined,
+      ccEmail: ccEmail || undefined,
       business: business || undefined,
     });
   };
@@ -588,13 +597,13 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
           </>
         ) : (
           <>
-            <div className={recognitionMode === "parsed" ? "recognition-summary" : "recognition-summary needs-review"}><span>{recognitionMode === "parsed" ? "✓" : "!"}</span><div><strong>{recognitionMode === "parsed" ? `已从原文提取 ${recognizedCount} 个岗位字段` : "当前方式尚未接入自动读取"}</strong><p>{recognitionMode === "parsed" ? "只填入原文中能够确认的内容，请继续核对和修正。" : "请手动补充必填字段；系统不会使用演示数据冒充识别结果。"}</p></div><em>{method}</em></div>
+            <div className={recognitionMode === "parsed" ? "recognition-summary" : "recognition-summary needs-review"}><span>{recognitionMode === "parsed" ? "✓" : "!"}</span><div><strong>{recognitionMode === "parsed" ? `已从原文提取 ${recognizedCount} 个岗位字段` : "当前方式尚未接入自动读取"}</strong><p>{recognitionMode === "parsed" ? "自动字段均附原文依据；没有依据的字段不会自动填入。" : "请手动补充必填字段；系统不会使用演示数据冒充识别结果。"}</p></div><em>{method}</em></div>
             <div className="confirm-grid">
-              <label><span>公司名称 {company ? <b>原文识别</b> : <em>请补充</em>}</span><input value={company} onChange={(event) => setCompany(event.target.value)} /></label>
-              <label><span>岗位名称 {title ? <b>原文识别</b> : <em>请补充</em>}</span><input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-              <label><span>工作地点 {location ? <b>原文识别</b> : <em>请核对</em>}</span><input value={location} onChange={(event) => setLocation(event.target.value)} /></label>
-              <label><span>工作性质 {employment ? <b>根据原文判断</b> : <em>请核对</em>}</span><select value={employment} onChange={(event) => setEmployment(event.target.value)}><option value="">请选择</option><option>实习</option><option>全职</option><option>兼职</option></select></label>
-              <label><span>岗位类别 <b>根据原文判断</b></span><select value={category} onChange={(event) => setCategory(event.target.value)}><option>产品 / 运营</option><option>运营</option><option>产品</option><option>法务</option><option>其他</option></select></label>
+              <label><span>公司名称 {company ? <b>有原文依据</b> : <em>请补充</em>}</span><input value={company} onChange={(event) => setCompany(event.target.value)} />{fieldEvidence.company && <small className="field-evidence" title={fieldEvidence.company}>依据：“{fieldEvidence.company}”</small>}</label>
+              <label><span>岗位名称 {title ? <b>有原文依据</b> : <em>请补充</em>}</span><input value={title} onChange={(event) => setTitle(event.target.value)} />{fieldEvidence.title && <small className="field-evidence" title={fieldEvidence.title}>依据：“{fieldEvidence.title}”</small>}</label>
+              <label><span>工作地点 {location ? <b>有原文依据</b> : <em>请核对</em>}</span><input value={location} onChange={(event) => setLocation(event.target.value)} />{fieldEvidence.location && <small className="field-evidence" title={fieldEvidence.location}>依据：“{fieldEvidence.location}”</small>}</label>
+              <label><span>工作性质 {employment ? <b>根据原文判断</b> : <em>请核对</em>}</span><select value={employment} onChange={(event) => setEmployment(event.target.value)}><option value="">请选择</option><option>实习</option><option>全职</option><option>兼职</option></select>{fieldEvidence.employment && <small className="field-evidence" title={fieldEvidence.employment}>依据：“{fieldEvidence.employment}”</small>}</label>
+              <label><span>岗位类别 <b>根据原文判断</b></span><select value={category} onChange={(event) => setCategory(event.target.value)}><option>产品 / 运营</option><option>运营</option><option>产品</option><option>法务</option><option>其他</option></select>{fieldEvidence.category && <small className="field-evidence" title={fieldEvidence.category}>依据：“{fieldEvidence.category}”</small>}</label>
               <label><span>你在哪里看到这个岗位？ <em>请确认</em></span><select value={source} onChange={(event) => setSource(event.target.value)}><option>企业官网</option><option>BOSS直聘</option><option>微信公众号</option><option>实习群 / 求职群</option><option>学校就业网</option><option>小红书</option><option>朋友推荐</option><option>内推</option><option>其他</option></select></label>
             </div>
             <div className="jd-preview"><div><strong>JD 摘要</strong><span>{method === "JD 文本" ? "已保留原文" : "等待补充"}</span></div><p>{summary}</p></div>
@@ -641,6 +650,7 @@ function ImportedJobOverview({ job, onAction, onOpenTab }: { job: JobRecord; onA
             <div><span>岗位类别</span><strong>{job.category}</strong></div>
             {job.business && <div><span>业务方向</span><strong>{job.business}</strong></div>}
             {job.contactEmail && <div><span>投递邮箱</span><strong>{job.contactEmail}</strong></div>}
+            {job.ccEmail && <div><span>抄送邮箱</span><strong>{job.ccEmail}</strong></div>}
           </div>
           <details className="raw-jd-details"><summary>查看已保存的 JD 原文</summary><p>{job.rawJd}</p></details>
         </section>
