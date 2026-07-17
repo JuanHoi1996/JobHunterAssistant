@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { parseJobText } from "./job-parser.js";
 
 type TabId = "overview" | "resume" | "letter" | "progress" | "interview";
 type ScreenId = "list" | "detail";
@@ -24,6 +25,10 @@ type JobRecord = {
   ageHours: number;
   materials: string;
   applicationMethod?: string;
+  jdSummary?: string;
+  rawJd?: string;
+  contactEmail?: string;
+  business?: string;
 };
 
 const tabs: { id: TabId; label: string; count?: number }[] = [
@@ -431,12 +436,20 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
   const [step, setStep] = useState<1 | 2>(1);
   const [method, setMethod] = useState<CaptureMethod>("岗位链接");
   const [fileName, setFileName] = useState("");
-  const [company, setCompany] = useState("腾讯");
-  const [title, setTitle] = useState("产品运营实习生");
-  const [location, setLocation] = useState("深圳");
-  const [employment, setEmployment] = useState("实习");
-  const [category, setCategory] = useState("产品 / 运营");
-  const [source, setSource] = useState("企业官网");
+  const [jobLink, setJobLink] = useState("");
+  const [jdText, setJdText] = useState("");
+  const [company, setCompany] = useState("");
+  const [title, setTitle] = useState("");
+  const [location, setLocation] = useState("");
+  const [employment, setEmployment] = useState("");
+  const [category, setCategory] = useState("其他");
+  const [source, setSource] = useState("其他");
+  const [summary, setSummary] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [business, setBusiness] = useState("");
+  const [recognizedCount, setRecognizedCount] = useState(0);
+  const [recognitionMode, setRecognitionMode] = useState<"parsed" | "manual">("manual");
+  const [formError, setFormError] = useState("");
   const methods: { id: CaptureMethod; icon: string; title: string; description: string }[] = [
     { id: "岗位链接", icon: "↗", title: "粘贴岗位链接", description: "适合企业官网和公开招聘页面" },
     { id: "JD 文本", icon: "文", title: "粘贴 JD 文本", description: "最稳定的通用导入方式" },
@@ -445,29 +458,100 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
   ];
 
   const beginRecognition = () => {
-    if (method === "岗位截图") setSource("实习群 / 求职群");
-    if (method === "JD 文本") setSource("其他");
-    if (method === "插件保存") setSource("BOSS直聘");
+    setFormError("");
+    setSource("其他");
+
+    if (method === "JD 文本") {
+      if (!jdText.trim()) {
+        setFormError("请先粘贴岗位 JD 文本。");
+        return;
+      }
+      const result = parseJobText(jdText);
+      setCompany(result.company);
+      setTitle(result.title);
+      setLocation(result.location);
+      setEmployment(result.employment);
+      setCategory(result.category);
+      setSummary(result.summary);
+      setContactEmail(result.email);
+      setBusiness(result.business);
+      setRecognizedCount([
+        result.company,
+        result.title,
+        result.location,
+        result.employment,
+        result.category !== "其他" ? result.category : "",
+        result.business,
+        result.email,
+      ].filter(Boolean).length);
+      setRecognitionMode("parsed");
+      setStep(2);
+      return;
+    }
+
+    if (method === "岗位链接" && !jobLink.trim()) {
+      setFormError("请先粘贴岗位链接。");
+      return;
+    }
+    if (method === "岗位截图" && !fileName) {
+      setFormError("请先选择一张岗位截图。");
+      return;
+    }
+
+    setCompany("");
+    setTitle("");
+    setLocation("");
+    setEmployment("");
+    setCategory("其他");
+    setContactEmail("");
+    setBusiness("");
+    setRecognizedCount(0);
+    setRecognitionMode("manual");
+    setSummary(
+      method === "岗位链接"
+        ? "当前公开原型尚未接入网页读取服务，请先手动补充岗位字段；不会使用示例数据代替识别结果。"
+        : method === "岗位截图"
+          ? "当前公开原型尚未接入图片文字识别，请先手动补充岗位字段；已选择的截图不会被误判为其他岗位。"
+          : "当前公开原型尚未与浏览器插件连接，请先手动补充岗位字段。",
+    );
     setStep(2);
   };
 
-  const create = () => onCreate({
-    id: `job-${Date.now()}`,
-    mark: company.slice(0, 1) || "新",
-    tone: "violet",
-    company,
-    title,
-    location,
-    employment,
-    category,
-    discoverySource: source,
-    captureMethod: method,
-    sourceHost: method === "岗位链接" ? "用户提供的岗位链接" : method,
-    status: "待投递",
-    savedLabel: "刚刚",
-    ageHours: 0,
-    materials: "待分析 JD",
-  });
+  const create = () => {
+    if (!company.trim() || !title.trim()) {
+      setFormError("请至少填写公司名称和岗位名称，再创建岗位记录。");
+      return;
+    }
+    let sourceHost = method;
+    if (method === "岗位链接") {
+      try {
+        sourceHost = new URL(jobLink).hostname || "用户提供的岗位链接";
+      } catch {
+        sourceHost = "用户提供的岗位链接";
+      }
+    }
+    onCreate({
+      id: `job-${Date.now()}`,
+      mark: company.slice(0, 1) || "新",
+      tone: "violet",
+      company: company.trim(),
+      title: title.trim(),
+      location: location.trim() || "地点待确认",
+      employment: employment || "性质待确认",
+      category,
+      discoverySource: source,
+      captureMethod: method,
+      sourceHost,
+      status: "待投递",
+      savedLabel: "刚刚",
+      ageHours: 0,
+      materials: method === "JD 文本" ? "JD 已解析 · 待优化" : "岗位信息待补充",
+      jdSummary: summary,
+      rawJd: method === "JD 文本" ? jdText.trim() : undefined,
+      contactEmail: contactEmail || undefined,
+      business: business || undefined,
+    });
+  };
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
@@ -488,8 +572,8 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
               ))}
             </div>
             <div className="capture-input">
-              {method === "岗位链接" && <label><span>岗位链接</span><input defaultValue="https://jobs.example.com/position/2027-ops" /></label>}
-              {method === "JD 文本" && <label><span>岗位 JD</span><textarea defaultValue="负责商业产品的用户研究、数据分析与跨团队项目推进……" /></label>}
+              {method === "岗位链接" && <label><span>岗位链接</span><input value={jobLink} onChange={(event) => setJobLink(event.target.value)} placeholder="粘贴企业官网或招聘平台的公开链接" /></label>}
+              {method === "JD 文本" && <label><span>岗位 JD</span><textarea value={jdText} onChange={(event) => setJdText(event.target.value)} placeholder="粘贴完整岗位信息，包含公司、岗位、地点和招聘要求时识别更准确" /></label>}
               {method === "岗位截图" && (
                 <label className="upload-zone">
                   <input type="file" accept="image/*" onChange={(event) => setFileName(event.target.files?.[0]?.name ?? "")} />
@@ -498,23 +582,25 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
               )}
               {method === "插件保存" && <div className="extension-note"><span>插</span><div><strong>在岗位页面打开“向前”插件</strong><p>插件只读取当前页面，不需要你的招聘网站密码。</p></div></div>}
             </div>
+            {formError && <p className="form-error" role="alert">{formError}</p>}
             <div className="privacy-line"><span>✓</span>不会要求招聘网站账号、密码、验证码或 Cookie</div>
-            <div className="modal-footer"><button className="secondary-button" onClick={onClose}>取消</button><button className="primary-button" onClick={beginRecognition}>识别岗位信息 →</button></div>
+            <div className="modal-footer"><button className="secondary-button" onClick={onClose}>取消</button><button className="primary-button" onClick={beginRecognition}>{method === "JD 文本" ? "解析岗位信息" : "继续确认"} →</button></div>
           </>
         ) : (
           <>
-            <div className="recognition-summary"><span>✓</span><div><strong>已提取 7 个岗位字段</strong><p>请确认标记为“需核对”的内容，再创建岗位记录。</p></div><em>{method}</em></div>
+            <div className={recognitionMode === "parsed" ? "recognition-summary" : "recognition-summary needs-review"}><span>{recognitionMode === "parsed" ? "✓" : "!"}</span><div><strong>{recognitionMode === "parsed" ? `已从原文提取 ${recognizedCount} 个岗位字段` : "当前方式尚未接入自动读取"}</strong><p>{recognitionMode === "parsed" ? "只填入原文中能够确认的内容，请继续核对和修正。" : "请手动补充必填字段；系统不会使用演示数据冒充识别结果。"}</p></div><em>{method}</em></div>
             <div className="confirm-grid">
-              <label><span>公司名称 <b>已识别</b></span><input value={company} onChange={(event) => setCompany(event.target.value)} /></label>
-              <label><span>岗位名称 <b>已识别</b></span><input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-              <label><span>工作地点 <em>需核对</em></span><input value={location} onChange={(event) => setLocation(event.target.value)} /></label>
-              <label><span>工作性质</span><select value={employment} onChange={(event) => setEmployment(event.target.value)}><option>实习</option><option>全职</option><option>兼职</option></select></label>
-              <label><span>岗位类别</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option>产品 / 运营</option><option>运营</option><option>产品</option><option>法务</option><option>其他</option></select></label>
-              <label><span>你在哪里看到这个岗位？</span><select value={source} onChange={(event) => setSource(event.target.value)}><option>企业官网</option><option>BOSS直聘</option><option>微信公众号</option><option>实习群 / 求职群</option><option>学校就业网</option><option>小红书</option><option>朋友推荐</option><option>内推</option><option>其他</option></select></label>
+              <label><span>公司名称 {company ? <b>原文识别</b> : <em>请补充</em>}</span><input value={company} onChange={(event) => setCompany(event.target.value)} /></label>
+              <label><span>岗位名称 {title ? <b>原文识别</b> : <em>请补充</em>}</span><input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+              <label><span>工作地点 {location ? <b>原文识别</b> : <em>请核对</em>}</span><input value={location} onChange={(event) => setLocation(event.target.value)} /></label>
+              <label><span>工作性质 {employment ? <b>根据原文判断</b> : <em>请核对</em>}</span><select value={employment} onChange={(event) => setEmployment(event.target.value)}><option value="">请选择</option><option>实习</option><option>全职</option><option>兼职</option></select></label>
+              <label><span>岗位类别 <b>根据原文判断</b></span><select value={category} onChange={(event) => setCategory(event.target.value)}><option>产品 / 运营</option><option>运营</option><option>产品</option><option>法务</option><option>其他</option></select></label>
+              <label><span>你在哪里看到这个岗位？ <em>请确认</em></span><select value={source} onChange={(event) => setSource(event.target.value)}><option>企业官网</option><option>BOSS直聘</option><option>微信公众号</option><option>实习群 / 求职群</option><option>学校就业网</option><option>小红书</option><option>朋友推荐</option><option>内推</option><option>其他</option></select></label>
             </div>
-            <div className="jd-preview"><div><strong>JD 摘要</strong><span>保存原文</span></div><p>负责目标用户研究与需求洞察，结合业务数据制定运营策略；协同产品、销售及内容团队推动项目落地，并持续复盘优化。</p></div>
+            <div className="jd-preview"><div><strong>JD 摘要</strong><span>{method === "JD 文本" ? "已保留原文" : "等待补充"}</span></div><p>{summary}</p></div>
+            {formError && <p className="form-error" role="alert">{formError}</p>}
             <div className="default-status-note"><span>待投递</span><p>创建后自动进入待投递状态；超过 24 小时仍未投递时会在工作台提醒。</p></div>
-            <div className="modal-footer"><button className="secondary-button" onClick={() => setStep(1)}>← 返回修改</button><button className="primary-button" onClick={create}>确认并创建岗位</button></div>
+            <div className="modal-footer"><button className="secondary-button" onClick={() => { setFormError(""); setStep(1); }}>← 返回修改</button><button className="primary-button" onClick={create}>确认并创建岗位</button></div>
           </>
         )}
       </section>
@@ -538,7 +624,57 @@ function ApplicationMethodDialog({ job, onClose, onConfirm }: { job: JobRecord; 
   );
 }
 
+function ImportedJobOverview({ job, onAction, onOpenTab }: { job: JobRecord; onAction: (message: string) => void; onOpenTab: (tab: TabId) => void }) {
+  return (
+    <div className="overview-grid">
+      <div className="main-column">
+        <section className="card jd-card">
+          <div className="card-heading">
+            <div><span className="kicker">岗位原文解析</span><h2>这份 JD 已确认的信息</h2></div>
+            <div className="analysis-state"><span />文本已解析</div>
+          </div>
+          <div className="insight-summary imported-summary"><div className="quote-mark">“</div><p>{job.jdSummary}</p></div>
+          <div className="imported-facts">
+            <div><span>招聘单位</span><strong>{job.company}</strong></div>
+            <div><span>岗位名称</span><strong>{job.title}</strong></div>
+            <div><span>工作地点</span><strong>{job.location}</strong></div>
+            <div><span>岗位类别</span><strong>{job.category}</strong></div>
+            {job.business && <div><span>业务方向</span><strong>{job.business}</strong></div>}
+            {job.contactEmail && <div><span>投递邮箱</span><strong>{job.contactEmail}</strong></div>}
+          </div>
+          <details className="raw-jd-details"><summary>查看已保存的 JD 原文</summary><p>{job.rawJd}</p></details>
+        </section>
+
+        <section className="card match-card pending-analysis-card">
+          <div className="card-heading">
+            <div><span className="kicker">下一步</span><h2>简历匹配尚未开始</h2></div>
+          </div>
+          <p>岗位字段已经保存。开始简历定制后，再根据这份 JD 和你的真实简历生成匹配分析，当前不展示示例结论。</p>
+          <button className="primary-button" onClick={() => onOpenTab("resume")}>去简历定制 →</button>
+        </section>
+      </div>
+
+      <aside className="right-column">
+        <section className="card next-step-card">
+          <div className="small-card-title"><span className="spark">✦</span><strong>建议下一步</strong><span>刚刚</span></div>
+          <h3>先核对岗位信息</h3>
+          <p>确认公司、岗位类别、来源渠道和投递邮箱，再开始制作岗位专属材料。</p>
+          <button className="primary-button full" onClick={() => onOpenTab("resume")}>开始准备材料 <span>→</span></button>
+        </section>
+        <section className="card utility-card">
+          <div className="small-card-title"><strong>原文保存状态</strong><span className="saved-state">已保存</span></div>
+          <p>系统保留了你粘贴的原始 JD，后续分析应以原文为依据。</p>
+          <button className="secondary-button full" onClick={() => onAction("岗位原文已安全保存在当前记录中")}>检查保存状态</button>
+        </section>
+      </aside>
+    </div>
+  );
+}
+
 function Overview({ job, onAction, onOpenTab }: { job: JobRecord; onAction: (message: string) => void; onOpenTab: (tab: TabId) => void }) {
+  if (job.rawJd) {
+    return <ImportedJobOverview job={job} onAction={onAction} onOpenTab={onOpenTab} />;
+  }
   return (
     <div className="overview-grid">
       <div className="main-column">
