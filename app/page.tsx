@@ -1,12 +1,31 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { buildRuleFieldMeta } from "./job-extraction.js";
 import { parseJobText } from "./job-parser.js";
 
 type TabId = "overview" | "resume" | "letter" | "progress" | "interview";
 type ScreenId = "list" | "detail";
 type JobStatus = "待投递" | "已投递" | "面试中" | "Offer" | "已结束";
 type CaptureMethod = "岗位链接" | "JD 文本" | "岗位截图" | "插件保存";
+type ExtractionFieldKey = "company" | "title" | "location" | "employment" | "category" | "email" | "ccEmail";
+type ExtractionFieldMeta = {
+  basis: "explicit" | "inferred" | "unknown";
+  confidence: "high" | "medium" | "low";
+  evidence: string;
+  reason: string;
+  source: "llm" | "rule";
+};
+
+const emptyFieldMeta = (): Record<ExtractionFieldKey, ExtractionFieldMeta> => Object.fromEntries(
+  ["company", "title", "location", "employment", "category", "email", "ccEmail"].map((key) => [key, {
+    basis: "unknown",
+    confidence: "low",
+    evidence: "",
+    reason: "",
+    source: "rule",
+  }]),
+) as Record<ExtractionFieldKey, ExtractionFieldMeta>;
 
 type JobRecord = {
   id: string;
@@ -450,8 +469,12 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
   const [ccEmail, setCcEmail] = useState("");
   const [business, setBusiness] = useState("");
   const [fieldEvidence, setFieldEvidence] = useState({ company: "", title: "", location: "", employment: "", category: "", email: "", ccEmail: "" });
+  const [fieldMeta, setFieldMeta] = useState<Record<ExtractionFieldKey, ExtractionFieldMeta>>(emptyFieldMeta);
   const [recognizedCount, setRecognizedCount] = useState(0);
   const [recognitionMode, setRecognitionMode] = useState<"parsed" | "manual">("manual");
+  const [recognitionEngine, setRecognitionEngine] = useState<"llm" | "rule" | "manual">("manual");
+  const [recognitionWarning, setRecognitionWarning] = useState("");
+  const [isRecognizing, setIsRecognizing] = useState(false);
   const [formError, setFormError] = useState("");
   const methods: { id: CaptureMethod; icon: string; title: string; description: string }[] = [
     { id: "岗位链接", icon: "↗", title: "粘贴岗位链接", description: "适合企业官网和公开招聘页面" },
@@ -460,36 +483,64 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
     { id: "插件保存", icon: "插", title: "插件一键保存", description: "读取当前已打开的岗位页面" },
   ];
 
-  const beginRecognition = () => {
+  const applyRecognitionResult = (result: ReturnType<typeof parseJobText> & { fieldMeta?: Record<ExtractionFieldKey, ExtractionFieldMeta> }) => {
+    setCompany(result.company);
+    setTitle(result.title);
+    setLocation(result.location);
+    setEmployment(result.employment);
+    setCategory(result.category);
+    setSummary(result.summary);
+    setContactEmail(result.email);
+    setCcEmail(result.ccEmail);
+    setBusiness(result.business);
+    setFieldEvidence(result.evidence);
+    setFieldMeta(result.fieldMeta ?? buildRuleFieldMeta(jdText, result));
+    setRecognizedCount([
+      result.company,
+      result.title,
+      result.location,
+      result.employment,
+      result.category !== "其他" ? result.category : "",
+      result.business,
+      result.email,
+      result.ccEmail,
+    ].filter(Boolean).length);
+  };
+
+  const beginRecognition = async () => {
     setFormError("");
     setSource("其他");
+    setRecognitionWarning("");
 
     if (method === "JD 文本") {
       if (!jdText.trim()) {
         setFormError("请先粘贴岗位 JD 文本。");
         return;
       }
-      const result = parseJobText(jdText);
-      setCompany(result.company);
-      setTitle(result.title);
-      setLocation(result.location);
-      setEmployment(result.employment);
-      setCategory(result.category);
-      setSummary(result.summary);
-      setContactEmail(result.email);
-      setCcEmail(result.ccEmail);
-      setBusiness(result.business);
-      setFieldEvidence(result.evidence);
-      setRecognizedCount([
-        result.company,
-        result.title,
-        result.location,
-        result.employment,
-        result.category !== "其他" ? result.category : "",
-        result.business,
-        result.email,
-        result.ccEmail,
-      ].filter(Boolean).length);
+      setIsRecognizing(true);
+      try {
+        const response = await fetch("/api/extract-job", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jdText }),
+        });
+        if (!response.ok) throw new Error("岗位识别请求失败");
+        const payload = await response.json() as {
+          mode: "llm" | "rule_fallback";
+          data: ReturnType<typeof parseJobText> & { fieldMeta?: Record<ExtractionFieldKey, ExtractionFieldMeta> };
+          warning?: string;
+        };
+        applyRecognitionResult(payload.data);
+        setRecognitionEngine(payload.mode === "llm" ? "llm" : "rule");
+        setRecognitionWarning(payload.warning ?? "");
+      } catch {
+        const result = parseJobText(jdText);
+        applyRecognitionResult(result);
+        setRecognitionEngine("rule");
+        setRecognitionWarning("AI 语义识别暂时不可用，已安全降级为规则解析；请重点核对推断字段。");
+      } finally {
+        setIsRecognizing(false);
+      }
       setRecognitionMode("parsed");
       setStep(2);
       return;
@@ -513,8 +564,10 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
     setCcEmail("");
     setBusiness("");
     setFieldEvidence({ company: "", title: "", location: "", employment: "", category: "", email: "", ccEmail: "" });
+    setFieldMeta(emptyFieldMeta());
     setRecognizedCount(0);
     setRecognitionMode("manual");
+    setRecognitionEngine("manual");
     setSummary(
       method === "岗位链接"
         ? "当前公开原型尚未接入网页读取服务，请先手动补充岗位字段；不会使用示例数据代替识别结果。"
@@ -523,6 +576,22 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
           : "当前公开原型尚未与浏览器插件连接，请先手动补充岗位字段。",
     );
     setStep(2);
+  };
+
+  const fieldBadge = (key: ExtractionFieldKey, value: string, missingLabel = "请核对") => {
+    if (!value) return <em>{missingLabel}</em>;
+    const meta = fieldMeta[key];
+    if (meta.source === "llm" && meta.basis === "explicit") return <b>AI＋原文校验</b>;
+    if (meta.source === "llm" && meta.basis === "inferred") return <em>AI 语义推断</em>;
+    if (meta.basis === "inferred") return <em>规则推断·请核对</em>;
+    return <b>原文直接提取</b>;
+  };
+
+  const evidenceLabel = (key: ExtractionFieldKey) => {
+    const meta = fieldMeta[key];
+    if (!meta.evidence) return "";
+    const explanation = meta.basis === "inferred" && meta.reason ? ` · ${meta.reason}` : "";
+    return `依据：“${meta.evidence}”${explanation}`;
   };
 
   const create = () => {
@@ -593,17 +662,17 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
             </div>
             {formError && <p className="form-error" role="alert">{formError}</p>}
             <div className="privacy-line"><span>✓</span>不会要求招聘网站账号、密码、验证码或 Cookie</div>
-            <div className="modal-footer"><button className="secondary-button" onClick={onClose}>取消</button><button className="primary-button" onClick={beginRecognition}>{method === "JD 文本" ? "解析岗位信息" : "继续确认"} →</button></div>
+            <div className="modal-footer"><button className="secondary-button" onClick={onClose}>取消</button><button className="primary-button" disabled={isRecognizing} onClick={beginRecognition}>{isRecognizing ? "正在用 AI 理解…" : method === "JD 文本" ? "AI 理解岗位信息" : "继续确认"}{!isRecognizing && " →"}</button></div>
           </>
         ) : (
           <>
-            <div className={recognitionMode === "parsed" ? "recognition-summary" : "recognition-summary needs-review"}><span>{recognitionMode === "parsed" ? "✓" : "!"}</span><div><strong>{recognitionMode === "parsed" ? `已从原文提取 ${recognizedCount} 个岗位字段` : "当前方式尚未接入自动读取"}</strong><p>{recognitionMode === "parsed" ? "自动字段均附原文依据；没有依据的字段不会自动填入。" : "请手动补充必填字段；系统不会使用演示数据冒充识别结果。"}</p></div><em>{method}</em></div>
+            <div className={recognitionEngine === "llm" ? "recognition-summary ai-recognition" : "recognition-summary needs-review"}><span>{recognitionEngine === "llm" ? "✦" : "!"}</span><div><strong>{recognitionEngine === "llm" ? `AI 已理解并校验 ${recognizedCount} 个岗位字段` : recognitionMode === "parsed" ? `规则解析出 ${recognizedCount} 个岗位字段` : "当前方式尚未接入自动读取"}</strong><p>{recognitionEngine === "llm" ? "直接提取与语义推断已分开标记；请重点核对橙色推断字段。" : recognitionWarning || "请手动补充必填字段；系统不会使用演示数据冒充识别结果。"}</p></div><em>{recognitionEngine === "llm" ? "AI 语义识别" : method}</em></div>
             <div className="confirm-grid">
-              <label><span>公司名称 {company ? <b>有原文依据</b> : <em>请补充</em>}</span><input value={company} onChange={(event) => setCompany(event.target.value)} />{fieldEvidence.company && <small className="field-evidence" title={fieldEvidence.company}>依据：“{fieldEvidence.company}”</small>}</label>
-              <label><span>岗位名称 {title ? <b>有原文依据</b> : <em>请补充</em>}</span><input value={title} onChange={(event) => setTitle(event.target.value)} />{fieldEvidence.title && <small className="field-evidence" title={fieldEvidence.title}>依据：“{fieldEvidence.title}”</small>}</label>
-              <label><span>工作地点 {location ? <b>有原文依据</b> : <em>请核对</em>}</span><input value={location} onChange={(event) => setLocation(event.target.value)} />{fieldEvidence.location && <small className="field-evidence" title={fieldEvidence.location}>依据：“{fieldEvidence.location}”</small>}</label>
-              <label><span>工作性质 {employment ? <b>根据原文判断</b> : <em>请核对</em>}</span><select value={employment} onChange={(event) => setEmployment(event.target.value)}><option value="">请选择</option><option>实习</option><option>全职</option><option>兼职</option></select>{fieldEvidence.employment && <small className="field-evidence" title={fieldEvidence.employment}>依据：“{fieldEvidence.employment}”</small>}</label>
-              <label><span>岗位类别 <b>根据原文判断</b></span><select value={category} onChange={(event) => setCategory(event.target.value)}><option>产品 / 运营</option><option>运营</option><option>产品</option><option>法务</option><option>其他</option></select>{fieldEvidence.category && <small className="field-evidence" title={fieldEvidence.category}>依据：“{fieldEvidence.category}”</small>}</label>
+              <label><span>公司名称 {fieldBadge("company", company, "请补充")}</span><input value={company} onChange={(event) => setCompany(event.target.value)} />{fieldEvidence.company && <small className="field-evidence" title={evidenceLabel("company")}>{evidenceLabel("company")}</small>}</label>
+              <label><span>岗位名称 {fieldBadge("title", title, "请补充")}</span><input value={title} onChange={(event) => setTitle(event.target.value)} />{fieldEvidence.title && <small className="field-evidence" title={evidenceLabel("title")}>{evidenceLabel("title")}</small>}</label>
+              <label><span>工作地点 {fieldBadge("location", location)}</span><input value={location} onChange={(event) => setLocation(event.target.value)} />{fieldEvidence.location && <small className="field-evidence" title={evidenceLabel("location")}>{evidenceLabel("location")}</small>}</label>
+              <label><span>工作性质 {fieldBadge("employment", employment)}</span><select value={employment} onChange={(event) => setEmployment(event.target.value)}><option value="">请选择</option><option>实习</option><option>全职</option><option>兼职</option><option>其他</option></select>{fieldEvidence.employment && <small className="field-evidence" title={evidenceLabel("employment")}>{evidenceLabel("employment")}</small>}</label>
+              <label><span>岗位类别 {fieldBadge("category", category)}</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option>产品 / 运营</option><option>运营</option><option>产品</option><option>法务</option><option>市场</option><option>销售</option><option>职能</option><option>技术</option><option>其他</option></select>{fieldEvidence.category && <small className="field-evidence" title={evidenceLabel("category")}>{evidenceLabel("category")}</small>}</label>
               <label><span>你在哪里看到这个岗位？ <em>请确认</em></span><select value={source} onChange={(event) => setSource(event.target.value)}><option>企业官网</option><option>BOSS直聘</option><option>微信公众号</option><option>实习群 / 求职群</option><option>学校就业网</option><option>小红书</option><option>朋友推荐</option><option>内推</option><option>其他</option></select></label>
             </div>
             <div className="jd-preview"><div><strong>JD 摘要</strong><span>{method === "JD 文本" ? "已保留原文" : "等待补充"}</span></div><p>{summary}</p></div>

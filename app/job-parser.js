@@ -19,14 +19,16 @@ const normalizeCompanyCandidate = (value, text) => {
     .replace(/^(?:招聘|内推)\s*[:：-]?\s*/u, "")
     .trim();
   const knownCompany = candidate.match(/字节跳动|ByteDance|腾讯|阿里巴巴|美团|小米|百度|京东|拼多多|快手|网易|华为/iu)?.[0]
-    ?? (!candidate && /@bytedance\.com\b/iu.test(text) ? "字节跳动" : "");
+    ?? (!candidate && /(?:@bytedance\.com\b|TikTok|抖音)/iu.test(text) ? "字节跳动" : "");
   if (/ByteDance/iu.test(knownCompany)) return "字节跳动";
   return knownCompany || candidate;
 };
 
 const cleanTitle = (value) => cleanLineValue(value)
+  .replace(/^急+招(?:继任)?[🔥\s]*/u, "")
   .replace(/[（(]?\s*\d+\s*(?:[-—–~～至到]\s*\d+)?\s*名\s*[）)]?.*$/u, "")
   .replace(/[，,]\s*(?:有留用机会|可留用|急招).*$/u, "")
+  .replace(/\s+(?:日常)?实习\s*base\b.*$/iu, "")
   .trim();
 
 const inferEmployment = (text, title) => {
@@ -75,7 +77,7 @@ export function parseJobText(rawText) {
   const explicitCompanyLine = findLine(lines, /(?:招聘单位|公司名称|单位名称)\s*[:：]/u);
   const explicitTitleLine = findLine(lines, /(?:招聘职位|招聘岗位|岗位名称|职位名称)\s*[:：]/u);
   const explicitLocationLine = findLine(lines, /(?:工作地点|办公地点|岗位地点)\s*[:：]/u);
-  const baseLocationLine = findLine(lines.slice(0, 8), /(?:^|📍\s*)Base\s*[:：]/iu);
+  const baseLocationLine = findLine(lines.slice(0, 8), /Base\s*[:：]?\s*(?:北京|上海|深圳|广州|杭州|成都|南京|武汉|西安|苏州|重庆|天津)/iu);
 
   const headerTitleLine = explicitTitleLine || findLine(
     lines.slice(0, 8),
@@ -87,6 +89,7 @@ export function parseJobText(rawText) {
       line.length <= 50
       && !/^(?:一|二|三|四|五|六|七|八|九|十|\d+)[、.．]/u.test(line)
       && !/(?:岗位|职位|招聘|Base|地点|到岗|入职)/iu.test(line)
+      && !/(?:邮箱|更正|更新|补充|通知|说明|备注)/u.test(line)
     )) ?? ""
     : "";
 
@@ -98,7 +101,7 @@ export function parseJobText(rawText) {
   const rawTitle = explicitTitle || headerTitleLine;
   const title = cleanTitle(rawTitle);
   const explicitLocation = cleanLineValue(firstMatch(text, /(?:^|\n)\s*(?:\d+[、.．]\s*)?(?:工作地点|办公地点|岗位地点)\s*[:：]\s*([^\n]+)/u));
-  const baseLocation = cleanLineValue(firstMatch(text, /(?:^|\n)\s*(?:📍\s*)?Base\s*[:：]\s*([^\n]+)/iu));
+  const baseLocation = cleanLineValue(firstMatch(text, /(?:^|\n)[^\n]*?\bBase\s*[:：]?\s*((?:北京|上海|深圳|广州|杭州|成都|南京|武汉|西安|苏州|重庆|天津)(?:市)?)/iu));
   const location = cleanLineValue((explicitLocation || baseLocation)
     .replace(/^📍\s*/u, "")
     .replace(/\s+.*(?:到岗|入职).*$/u, ""));
@@ -120,8 +123,9 @@ export function parseJobText(rawText) {
   const employment = inferEmployment(text, title);
   const category = inferCategory(text, title);
 
+  const companyEvidence = explicitCompanyLine || headerCompanyLine || (company ? findLine(lines, /TikTok|抖音|字节跳动|ByteDance/iu) : "");
   const evidence = {
-    company: explicitCompanyLine || headerCompanyLine,
+    company: companyEvidence,
     title: explicitTitleLine || headerTitleLine,
     location: explicitLocationLine || baseLocationLine,
     employment: headerTitleLine || findLine(lines, /(?:全职|兼职|实习)/u),

@@ -189,6 +189,8 @@ button { color: inherit; }
 .recognition-summary { display: flex; align-items: center; gap: 11px; margin: 17px 0; padding: 11px 12px; border-radius: 10px; background: #eff9f5; }
 .recognition-summary > span { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--green); font-weight: 800; }.recognition-summary > div { flex: 1; }.recognition-summary strong { display: block; font-size: 10px; }.recognition-summary p { margin: 4px 0 0; color: #799087; font-size: 8px; }.recognition-summary em { color: #558172; font-size: 8px; font-style: normal; }
 .recognition-summary.needs-review { background: #fff6e8; }.recognition-summary.needs-review > span { background: #d89430; }.recognition-summary.needs-review p, .recognition-summary.needs-review em { color: #9c7540; }
+.recognition-summary.ai-recognition { background: #f0f2ff; }.recognition-summary.ai-recognition > span { background: #5865d8; }.recognition-summary.ai-recognition p, .recognition-summary.ai-recognition em { color: #6873b9; }
+.modal-footer button:disabled { cursor: wait; opacity: .72; }
 .confirm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
 .confirm-grid label > span { display: flex; align-items: center; justify-content: space-between; }.confirm-grid label b, .confirm-grid label em { padding: 2px 5px; border-radius: 4px; font-size: 7px; font-style: normal; font-weight: 700; }.confirm-grid label b { color: #267a61; background: #eaf8f3; }.confirm-grid label em { color: #a4691d; background: #fff0dc; }
 .field-evidence { display: block; overflow: hidden; color: #7f8a9d; font-size: 7px; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }

@@ -50,6 +50,22 @@ const freeformBytedanceJd = `字节跳动Tiktok Shop
 简历发送至：wangqingyu.whale@bytedance.com
 抄送：zhangzekai.987@bytedance.com`;
 
+const noisyTiktokJd = `邮箱有更正：
+急急急招继任🔥TikTok AI 产品经理 日常实习base 北京
+TT主站的AI Chatbot，业务前沿，exposure好[拳头]
+
+1、参与TikTok大模型应用产品的设计、功能开发与策略迭代，从用户视角定义体验标准并推动落地；
+2、与算法、工程、设计等团队紧密协作，全流程参与模型训练、功能上线和实验迭代；
+3、基于模型评测、用户调研和数据反馈，提出改进方案并推动产品迭代；
+4、持续关注行业趋势与前沿研究，带来新的思考与启发。
+职位要求
+1、本科及以上学历在读，计算机、人工智能、数据科学、产品设计、用户研究等相关专业；
+2、学习能力强，对AI有足够的热情，有搜索、推荐、NLP、AI相关项目经验者优先；
+3、有自驱力，具备良好的逻辑思维和团队协作精神；
+4、每周能保证实习4天及以上，连续实习4个月。
+
+简历欢迎投递邮箱📮：1371906748@qq.com`;
+
 test("extracts the supplied law-firm internship JD without demo-data leakage", () => {
   const result = parseJobText(lawFirmJd);
 
@@ -97,4 +113,19 @@ test("extracts company, title and Base location from a free-form header", () => 
   assert.match(result.summary, /字节跳动招聘推荐产品实习生/u);
   assert.match(result.summary, /工作地点为北京/u);
   assert.match(result.summary, /抄送邮箱：zhangzekai\.987@bytedance\.com/u);
+});
+
+test("ignores correction notices and extracts a mixed TikTok recruiting headline", () => {
+  const result = parseJobText(noisyTiktokJd);
+
+  assert.equal(result.company, "字节跳动");
+  assert.equal(result.title, "TikTok AI 产品经理");
+  assert.equal(result.location, "北京");
+  assert.equal(result.employment, "实习");
+  assert.equal(result.category, "产品");
+  assert.equal(result.email, "1371906748@qq.com");
+  assert.equal(result.evidence.company, "急急急招继任🔥TikTok AI 产品经理 日常实习base 北京");
+  assert.equal(result.evidence.title, "急急急招继任🔥TikTok AI 产品经理 日常实习base 北京");
+  assert.equal(result.evidence.location, "急急急招继任🔥TikTok AI 产品经理 日常实习base 北京");
+  assert.doesNotMatch(result.company, /邮箱|更正/u);
 });
