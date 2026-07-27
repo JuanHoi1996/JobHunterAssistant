@@ -1,7 +1,7 @@
 ---
 title: LLM JD 结构化识别链路 V0.3
 date: 2026-07-18
-status: implemented-awaiting-api-key
+status: implemented-auth-gate-pending
 tags:
   - 向前
   - MVP
@@ -127,3 +127,18 @@ OpenAI Structured Outputs 能保证输出符合指定 JSON Schema，但只能保
 本归档对应提交信息：
 
 `feat(jobs): add grounded LLM extraction pipeline`
+
+## 2026-07-27 在线验证更新
+
+- 生产环境已经以 Secret 方式配置 `OPENAI_API_KEY`，密钥内容不可回读，也未进入代码、文档或 Git。
+- 最新 LLM 识别版本已经成功发布到公开预览站点。
+- 在线页面仍会降级为规则解析，因为公开访问不会自动提供已验证的用户邮箱，而当前接口仅允许邮箱白名单中的登录用户调用模型。
+- 使用外部请求伪造 `oai-authenticated-user-email` 无法绕过限制，说明 Sites 会过滤不可信身份头，当前费用保护有效。
+- TikTok 测试 JD 在规则降级下已正确得到：公司“字节跳动”、岗位“TikTok AI 产品经理”、地点“北京”、工作性质“实习”、岗位类别“产品”。
+
+下一步需要确认身份方案：
+
+1. 保持公开预览，为 AI 功能增加“使用 ChatGPT 登录”；仅白名单账号可调用模型。
+2. 将整个站点改为仅指定账号可访问，由 Sites 在所有请求中提供可信身份。
+
+推荐方案 1：保留公开演示能力，同时控制 API 费用和模型权限。
