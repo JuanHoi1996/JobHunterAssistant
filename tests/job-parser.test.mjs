@@ -129,3 +129,13 @@ test("ignores correction notices and extracts a mixed TikTok recruiting headline
   assert.equal(result.evidence.location, "急急急招继任🔥TikTok AI 产品经理 日常实习base 北京");
   assert.doesNotMatch(result.company, /邮箱|更正/u);
 });
+
+test("fills a detailed location when an explicit label starts with a map-pin emoji", () => {
+  const result = parseJobText(`【字节跳动】 TikTok Shop 策略运营日常实习生
+📍 工作地点：上海新江湾
+简历投递：jobs@example.com`);
+
+  assert.equal(result.location, "上海新江湾");
+  assert.equal(result.evidence.location, "📍 工作地点：上海新江湾");
+  assert.match(result.summary, /工作地点为上海新江湾/u);
+});

@@ -100,7 +100,10 @@ export function parseJobText(rawText) {
   const explicitTitle = cleanLineValue(firstMatch(text, /(?:^|\n)\s*(?:\d+[、.．]\s*)?(?:招聘职位|招聘岗位|岗位名称|职位名称)\s*[:：]\s*([^\n]+)/u));
   const rawTitle = explicitTitle || headerTitleLine;
   const title = cleanTitle(rawTitle);
-  const explicitLocation = cleanLineValue(firstMatch(text, /(?:^|\n)\s*(?:\d+[、.．]\s*)?(?:工作地点|办公地点|岗位地点)\s*[:：]\s*([^\n]+)/u));
+  const explicitLocation = cleanLineValue(firstMatch(
+    text,
+    /(?:^|\n)\s*(?:\d+[、.．]\s*)?(?:📍|📌)?\s*(?:工作地点|办公地点|岗位地点)\s*[:：]\s*([^\n]+)/u,
+  ));
   const baseLocation = cleanLineValue(firstMatch(text, /(?:^|\n)[^\n]*?\bBase\s*[:：]?\s*((?:北京|上海|深圳|广州|杭州|成都|南京|武汉|西安|苏州|重庆|天津)(?:市)?)/iu));
   const location = cleanLineValue((explicitLocation || baseLocation)
     .replace(/^📍\s*/u, "")
