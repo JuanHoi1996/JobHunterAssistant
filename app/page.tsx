@@ -454,10 +454,9 @@ function JobList({
 
 function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (job: JobRecord) => void }) {
   const [step, setStep] = useState<1 | 2>(1);
-  const [method, setMethod] = useState<CaptureMethod>("岗位链接");
-  const [fileName, setFileName] = useState("");
-  const [jobLink, setJobLink] = useState("");
+  const [method, setMethod] = useState<CaptureMethod>("JD 文本");
   const [jdText, setJdText] = useState("");
+  const [comingSoonMessage, setComingSoonMessage] = useState("");
   const [company, setCompany] = useState("");
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
@@ -476,11 +475,11 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
   const [recognitionWarning, setRecognitionWarning] = useState("");
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [formError, setFormError] = useState("");
-  const methods: { id: CaptureMethod; icon: string; title: string; description: string }[] = [
-    { id: "岗位链接", icon: "↗", title: "粘贴岗位链接", description: "适合企业官网和公开招聘页面" },
-    { id: "JD 文本", icon: "文", title: "粘贴 JD 文本", description: "最稳定的通用导入方式" },
-    { id: "岗位截图", icon: "图", title: "上传岗位截图", description: "适合公众号、实习群和登录页面" },
-    { id: "插件保存", icon: "插", title: "插件一键保存", description: "读取当前已打开的岗位页面" },
+  const methods: { id: CaptureMethod; icon: string; title: string; description: string; available: boolean }[] = [
+    { id: "岗位链接", icon: "↗", title: "粘贴岗位链接", description: "网页读取能力正在准备中", available: false },
+    { id: "JD 文本", icon: "文", title: "粘贴 JD 文本", description: "当前开放 · 最稳定的导入方式", available: true },
+    { id: "岗位截图", icon: "图", title: "上传岗位截图", description: "图片识别能力正在准备中", available: false },
+    { id: "插件保存", icon: "插", title: "插件一键保存", description: "插件连接能力正在准备中", available: false },
   ];
 
   const applyRecognitionResult = (result: ReturnType<typeof parseJobText> & { fieldMeta?: Record<ExtractionFieldKey, ExtractionFieldMeta> }) => {
@@ -546,36 +545,6 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
       return;
     }
 
-    if (method === "岗位链接" && !jobLink.trim()) {
-      setFormError("请先粘贴岗位链接。");
-      return;
-    }
-    if (method === "岗位截图" && !fileName) {
-      setFormError("请先选择一张岗位截图。");
-      return;
-    }
-
-    setCompany("");
-    setTitle("");
-    setLocation("");
-    setEmployment("");
-    setCategory("其他");
-    setContactEmail("");
-    setCcEmail("");
-    setBusiness("");
-    setFieldEvidence({ company: "", title: "", location: "", employment: "", category: "", email: "", ccEmail: "" });
-    setFieldMeta(emptyFieldMeta());
-    setRecognizedCount(0);
-    setRecognitionMode("manual");
-    setRecognitionEngine("manual");
-    setSummary(
-      method === "岗位链接"
-        ? "当前公开原型尚未接入网页读取服务，请先手动补充岗位字段；不会使用示例数据代替识别结果。"
-        : method === "岗位截图"
-          ? "当前公开原型尚未接入图片文字识别，请先手动补充岗位字段；已选择的截图不会被误判为其他岗位。"
-          : "当前公开原型尚未与浏览器插件连接，请先手动补充岗位字段。",
-    );
-    setStep(2);
   };
 
   const fieldBadge = (key: ExtractionFieldKey, value: string, missingLabel = "请核对") => {
@@ -599,14 +568,6 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
       setFormError("请至少填写公司名称和岗位名称，再创建岗位记录。");
       return;
     }
-    let sourceHost = method;
-    if (method === "岗位链接") {
-      try {
-        sourceHost = new URL(jobLink).hostname || "用户提供的岗位链接";
-      } catch {
-        sourceHost = "用户提供的岗位链接";
-      }
-    }
     onCreate({
       id: `job-${Date.now()}`,
       mark: company.slice(0, 1) || "新",
@@ -618,7 +579,7 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
       category,
       discoverySource: source,
       captureMethod: method,
-      sourceHost,
+      sourceHost: method,
       status: "待投递",
       savedLabel: "刚刚",
       ageHours: 0,
@@ -644,25 +605,30 @@ function NewJobDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (j
             <p className="modal-intro">选择最方便的方式。识别完成后，你还可以检查和修改所有字段。</p>
             <div className="capture-methods">
               {methods.map((item) => (
-                <button key={item.id} className={method === item.id ? "capture-method active" : "capture-method"} onClick={() => setMethod(item.id)}>
-                  <span>{item.icon}</span><strong>{item.title}</strong><small>{item.description}</small><i>{method === item.id ? "✓" : ""}</i>
+                <button
+                  key={item.id}
+                  className={`capture-method${method === item.id ? " active" : ""}${item.available ? "" : " unavailable"}`}
+                  aria-disabled={!item.available}
+                  onClick={() => {
+                    if (!item.available) {
+                      setComingSoonMessage(`“${item.title}”功能尚未开放，请先粘贴 JD 文本。`);
+                      return;
+                    }
+                    setComingSoonMessage("");
+                    setMethod(item.id);
+                  }}
+                >
+                  <span>{item.icon}</span><strong>{item.title}</strong><small>{item.description}</small><i>{item.available ? method === item.id ? "✓" : "" : "暂未开放"}</i>
                 </button>
               ))}
             </div>
+            {comingSoonMessage && <p className="coming-soon-notice" role="status"><span>i</span>{comingSoonMessage}</p>}
             <div className="capture-input">
-              {method === "岗位链接" && <label><span>岗位链接</span><input value={jobLink} onChange={(event) => setJobLink(event.target.value)} placeholder="粘贴企业官网或招聘平台的公开链接" /></label>}
               {method === "JD 文本" && <label><span>岗位 JD</span><textarea value={jdText} onChange={(event) => setJdText(event.target.value)} placeholder="粘贴完整岗位信息，包含公司、岗位、地点和招聘要求时识别更准确" /></label>}
-              {method === "岗位截图" && (
-                <label className="upload-zone">
-                  <input type="file" accept="image/*" onChange={(event) => setFileName(event.target.files?.[0]?.name ?? "")} />
-                  <span>▧</span><strong>{fileName || "点击选择岗位截图"}</strong><small>支持 PNG、JPG；上传前可先裁剪或打码</small>
-                </label>
-              )}
-              {method === "插件保存" && <div className="extension-note"><span>插</span><div><strong>在岗位页面打开“向前”插件</strong><p>插件只读取当前页面，不需要你的招聘网站密码。</p></div></div>}
             </div>
             {formError && <p className="form-error" role="alert">{formError}</p>}
             <div className="privacy-line"><span>✓</span>不会要求招聘网站账号、密码、验证码或 Cookie</div>
-            <div className="modal-footer"><button className="secondary-button" onClick={onClose}>取消</button><button className="primary-button" disabled={isRecognizing} onClick={beginRecognition}>{isRecognizing ? "正在用 AI 理解…" : method === "JD 文本" ? "AI 理解岗位信息" : "继续确认"}{!isRecognizing && " →"}</button></div>
+            <div className="modal-footer"><button className="secondary-button" onClick={onClose}>取消</button><button className="primary-button" disabled={isRecognizing} onClick={beginRecognition}>{isRecognizing ? "正在用 AI 理解…" : "AI 理解岗位信息"}{!isRecognizing && " →"}</button></div>
           </>
         ) : (
           <>

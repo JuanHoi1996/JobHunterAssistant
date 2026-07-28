@@ -174,8 +174,14 @@ button { color: inherit; }
 .capture-methods { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .capture-method { position: relative; display: grid; grid-template-columns: 38px 1fr 20px; grid-template-rows: auto auto; column-gap: 11px; padding: 13px; border: 1px solid var(--line); border-radius: 11px; color: #4d596e; background: #fff; text-align: left; cursor: pointer; }
 .capture-method.active { border-color: #9aa6ee; background: #f7f8ff; box-shadow: 0 6px 18px rgba(70,87,200,.08); }
+.capture-method.unavailable { grid-template-columns: 38px 1fr auto; color: #9ba3b1; border-color: #e7e9ee; background: #f6f7f9; box-shadow: none; }
+.capture-method.unavailable:hover { border-color: #d8dce4; background: #f2f3f6; }
+.capture-method.unavailable > span { color: #9da4af; background: #e8eaee; }
+.capture-method.unavailable i { min-width: 44px; color: #9ba2ae; font-size: 8px; }
 .capture-method > span { grid-row: 1 / 3; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 10px; color: #5263d2; background: #ecefff; font-size: 13px; font-weight: 750; }
 .capture-method strong { align-self: end; font-size: 10px; }.capture-method small { align-self: start; margin-top: 4px; color: #969eac; font-size: 8px; }.capture-method i { grid-row: 1 / 3; grid-column: 3; align-self: center; color: var(--green); font-size: 11px; font-style: normal; }
+.coming-soon-notice { display: flex; align-items: center; gap: 8px; margin: 11px 0 0; padding: 9px 11px; border: 1px solid #e3e6ec; border-radius: 9px; color: #6f7888; background: #f8f9fb; font-size: 9px; }
+.coming-soon-notice span { width: 18px; height: 18px; display: grid; flex: 0 0 auto; place-items: center; border-radius: 50%; color: #fff; background: #9ca5b4; font-size: 9px; font-weight: 700; }
 .capture-input { margin-top: 13px; padding: 14px; border-radius: 11px; background: #f7f8fa; }
 .capture-input label:not(.upload-zone), .confirm-grid label { display: grid; gap: 7px; color: #657186; font-size: 9px; }
 .capture-input input, .capture-input textarea, .confirm-grid input, .confirm-grid select { width: 100%; border: 1px solid #dfe4ec; border-radius: 8px; outline: 0; color: #465267; background: #fff; font-size: 10px; }
