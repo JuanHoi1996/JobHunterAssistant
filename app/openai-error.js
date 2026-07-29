@@ -38,7 +38,7 @@ export function classifyOpenAIError(status, payload = {}) {
   if (status === 429 || QUOTA_CODES.has(code)) {
     return {
       errorCode: "openai_quota",
-      message: "AI API 额度不足或请求过多，请检查 OpenAI API 余额与用量限制后重试。",
+      message: "当前产品的 AI API 额度不足或请求过多。切换 ChatGPT 登录账号不会增加 API 额度，请检查应用 API Key 的余额与用量限制。",
       status: 503,
       diagnostic: { upstreamStatus: status, upstreamCode: code, upstreamType: type },
     };

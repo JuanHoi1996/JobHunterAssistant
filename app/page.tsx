@@ -85,9 +85,17 @@ type ResumeVersion = {
   createdAt: string;
 };
 
+type SessionState = {
+  authenticated: boolean;
+  email: string | null;
+  signInPath: string;
+  signOutPath: string;
+};
+
 const LOCAL_KEYS = {
   jobs: "xiangqian.jobs.v1",
   masterResume: "xiangqian.master-resume.v1",
+  masterResumeName: "xiangqian.master-resume-name.v1",
   analyses: "xiangqian.resume-analyses.v1",
   versions: "xiangqian.resume-versions.v1",
   returnJob: "xiangqian.resume-return-job.v1",
@@ -193,8 +201,15 @@ export default function Home() {
   const [reminderDismissed, setReminderDismissed] = useState(false);
   const [toast, setToast] = useState("");
   const [masterResume, setMasterResume] = useState("");
+  const [masterResumeName, setMasterResumeName] = useState("手动录入");
   const [resumeAnalyses, setResumeAnalyses] = useState<Record<string, ResumeAnalysis>>({});
   const [resumeVersions, setResumeVersions] = useState<ResumeVersion[]>([]);
+  const [session, setSession] = useState<SessionState>({
+    authenticated: false,
+    email: null,
+    signInPath: "/signin-with-chatgpt?return_to=%2F",
+    signOutPath: "/signout-with-chatgpt?return_to=%2F",
+  });
   const [storageReady, setStorageReady] = useState(false);
 
   useEffect(() => {
@@ -207,6 +222,7 @@ export default function Home() {
         const restoredJobs = storedJobs ? JSON.parse(storedJobs) as JobRecord[] : initialJobs;
         if (Array.isArray(restoredJobs) && restoredJobs.length) setJobRecords(restoredJobs);
         setMasterResume(window.localStorage.getItem(LOCAL_KEYS.masterResume) ?? "");
+        setMasterResumeName(window.localStorage.getItem(LOCAL_KEYS.masterResumeName) ?? "手动录入");
         if (storedAnalyses) setResumeAnalyses(JSON.parse(storedAnalyses) as Record<string, ResumeAnalysis>);
         if (storedVersions) setResumeVersions(JSON.parse(storedVersions) as ResumeVersion[]);
         if (returnJobId && restoredJobs.some((job) => job.id === returnJobId)) {
@@ -225,12 +241,22 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    fetch("/api/session", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload: SessionState) => setSession(payload))
+      .catch(() => {
+        // Account controls remain available with their safe default paths.
+      });
+  }, []);
+
+  useEffect(() => {
     if (!storageReady) return;
     window.localStorage.setItem(LOCAL_KEYS.jobs, JSON.stringify(jobRecords));
     window.localStorage.setItem(LOCAL_KEYS.masterResume, masterResume);
+    window.localStorage.setItem(LOCAL_KEYS.masterResumeName, masterResumeName);
     window.localStorage.setItem(LOCAL_KEYS.analyses, JSON.stringify(resumeAnalyses));
     window.localStorage.setItem(LOCAL_KEYS.versions, JSON.stringify(resumeVersions));
-  }, [jobRecords, masterResume, resumeAnalyses, resumeVersions, storageReady]);
+  }, [jobRecords, masterResume, masterResumeName, resumeAnalyses, resumeVersions, storageReady]);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -268,14 +294,7 @@ export default function Home() {
     showToast("岗位已收录，并自动标记为待投递");
   };
 
-  const saveResumeVersion = (job: JobRecord, analysis: ResumeAnalysis) => {
-    let content = masterResume;
-    analysis.accepted.forEach((index) => {
-      const suggestion = analysis.suggestions[index];
-      if (suggestion && content.includes(suggestion.original)) {
-        content = content.replace(suggestion.original, suggestion.revised);
-      }
-    });
+  const saveResumeVersion = (job: JobRecord, analysis: ResumeAnalysis, content: string) => {
     const versionNumber = resumeVersions.filter((version) => version.jobId === job.id).length + 1;
     const version: ResumeVersion = {
       id: `resume-${job.id}-${Date.now()}`,
@@ -296,6 +315,7 @@ export default function Home() {
 
   const clearLocalResumeData = () => {
     setMasterResume("");
+    setMasterResumeName("手动录入");
     setResumeAnalyses({});
     setResumeVersions([]);
     showToast("本地简历与岗位专属版本已清除");
@@ -358,12 +378,19 @@ export default function Home() {
         </div>
 
         <div className="sidebar-footer">
-          <div className="avatar">林</div>
+          <div className="avatar">{session.email?.slice(0, 1).toUpperCase() || "访"}</div>
           <div>
-            <strong>林同学</strong>
-            <span>档案完整度 86%</span>
+            <strong>{session.authenticated ? "ChatGPT 已登录" : "尚未登录"}</strong>
+            <span title={session.email || undefined}>{session.email || "登录后可使用 AI"}</span>
           </div>
-          <button aria-label="打开设置">•••</button>
+          <button
+            className="account-switch-button"
+            aria-label={session.authenticated ? "退出并切换 ChatGPT 账号" : "登录 ChatGPT"}
+            title={session.authenticated ? "退出并切换 ChatGPT 账号" : "登录 ChatGPT"}
+            onClick={() => window.location.assign(session.authenticated ? session.signOutPath : session.signInPath)}
+          >
+            {session.authenticated ? "切换" : "登录"}
+          </button>
         </div>
       </aside>
 
@@ -395,8 +422,19 @@ export default function Home() {
         ) : screen === "resume-center" ? (
           <ResumeCenter
             masterResume={masterResume}
+            masterResumeName={masterResumeName}
             versions={resumeVersions}
-            onMasterResumeChange={setMasterResume}
+            onMasterResumeChange={(value) => {
+              setMasterResume(value);
+              setMasterResumeName("手动编辑");
+              setResumeAnalyses({});
+            }}
+            onMasterResumeImport={(name, content) => {
+              setMasterResumeName(name);
+              setMasterResume(content);
+              setResumeAnalyses({});
+              showToast("Word 主简历已在当前浏览器完成解析并保存");
+            }}
             onOpenJob={(jobId) => {
               setSelectedJobId(jobId);
               setScreen("detail");
@@ -454,20 +492,22 @@ export default function Home() {
             </div>
 
             <div className="workspace-body">
-              {activeTab === "overview" && <Overview job={selectedJob} onAction={showToast} onOpenTab={setActiveTab} />}
+              {activeTab === "overview" && <Overview job={selectedJob} analysis={resumeAnalyses[selectedJob.id]} onAction={showToast} onOpenTab={setActiveTab} />}
               {activeTab === "resume" && (
                 <ResumePanel
+                  key={selectedJob.id}
                   job={selectedJob}
                   masterResume={masterResume}
+                  masterResumeName={masterResumeName}
                   analysis={resumeAnalyses[selectedJob.id]}
-                  onMasterResumeChange={setMasterResume}
                   onAnalysis={(analysis) => setResumeAnalyses((current) => ({ ...current, [selectedJob.id]: analysis }))}
                   onResetAnalysis={() => setResumeAnalyses((current) => {
                     const next = { ...current };
                     delete next[selectedJob.id];
                     return next;
                   })}
-                  onSaveVersion={(analysis) => saveResumeVersion(selectedJob, analysis)}
+                  onSaveVersion={(analysis, content) => saveResumeVersion(selectedJob, analysis, content)}
+                  onOpenResumeCenter={() => setScreen("resume-center")}
                   onAction={showToast}
                 />
               )}
@@ -821,7 +861,7 @@ function ApplicationMethodDialog({ job, onClose, onConfirm }: { job: JobRecord; 
   );
 }
 
-function ImportedJobOverview({ job, onAction, onOpenTab }: { job: JobRecord; onAction: (message: string) => void; onOpenTab: (tab: TabId) => void }) {
+function ImportedJobOverview({ job, analysis, onAction, onOpenTab }: { job: JobRecord; analysis?: ResumeAnalysis; onAction: (message: string) => void; onOpenTab: (tab: TabId) => void }) {
   return (
     <div className="overview-grid">
       <div className="main-column">
@@ -843,13 +883,7 @@ function ImportedJobOverview({ job, onAction, onOpenTab }: { job: JobRecord; onA
           <details className="raw-jd-details"><summary>查看已保存的 JD 原文</summary><p>{job.rawJd}</p></details>
         </section>
 
-        <section className="card match-card pending-analysis-card">
-          <div className="card-heading">
-            <div><span className="kicker">下一步</span><h2>简历匹配尚未开始</h2></div>
-          </div>
-          <p>岗位字段已经保存。开始简历定制后，再根据这份 JD 和你的真实简历生成匹配分析，当前不展示示例结论。</p>
-          <button className="primary-button" onClick={() => onOpenTab("resume")}>去简历定制 →</button>
-        </section>
+        <EvidenceMatchCard analysis={analysis} onOpen={() => onOpenTab("resume")} />
       </div>
 
       <aside className="right-column">
@@ -869,9 +903,9 @@ function ImportedJobOverview({ job, onAction, onOpenTab }: { job: JobRecord; onA
   );
 }
 
-function Overview({ job, onAction, onOpenTab }: { job: JobRecord; onAction: (message: string) => void; onOpenTab: (tab: TabId) => void }) {
+function Overview({ job, analysis, onAction, onOpenTab }: { job: JobRecord; analysis?: ResumeAnalysis; onAction: (message: string) => void; onOpenTab: (tab: TabId) => void }) {
   if (job.rawJd) {
-    return <ImportedJobOverview job={job} onAction={onAction} onOpenTab={onOpenTab} />;
+    return <ImportedJobOverview job={job} analysis={analysis} onAction={onAction} onOpenTab={onOpenTab} />;
   }
   return (
     <div className="overview-grid">
@@ -910,38 +944,7 @@ function Overview({ job, onAction, onOpenTab }: { job: JobRecord; onAction: (mes
           </div>
         </section>
 
-        <section className="card match-card">
-          <div className="card-heading">
-            <div>
-              <span className="kicker">简历匹配分析</span>
-              <h2>你和这个岗位的距离</h2>
-            </div>
-            <button className="text-button" onClick={() => onOpenTab("resume")}>查看完整建议 →</button>
-          </div>
-          <div className="match-layout">
-            <div className="score-wrap">
-              <div className="score-ring"><div><strong>82</strong><span>匹配度</span></div></div>
-              <p>高于同类候选人<br /><strong>约 68%</strong></p>
-            </div>
-            <div className="match-details">
-              <div className="match-row success">
-                <span className="match-icon">✓</span>
-                <div><strong>已被证明的优势</strong><p>用户研究、活动复盘、跨部门协作</p></div>
-                <span className="match-count">6 项</span>
-              </div>
-              <div className="match-row warning">
-                <span className="match-icon">!</span>
-                <div><strong>建议补强的表达</strong><p>弱化“执行”，突出策略判断与数据结果</p></div>
-                <span className="match-count">3 项</span>
-              </div>
-              <div className="match-row muted">
-                <span className="match-icon">–</span>
-                <div><strong>暂未提供证据</strong><p>广告商业化产品经验</p></div>
-                <span className="match-count">1 项</span>
-              </div>
-            </div>
-          </div>
-        </section>
+        <EvidenceMatchCard analysis={analysis} onOpen={() => onOpenTab("resume")} />
       </div>
 
       <aside className="right-column">
@@ -977,26 +980,93 @@ function Overview({ job, onAction, onOpenTab }: { job: JobRecord; onAction: (mes
   );
 }
 
+function EvidenceMatchCard({ analysis, onOpen }: { analysis?: ResumeAnalysis; onOpen: () => void }) {
+  if (!analysis) {
+    return (
+      <section className="card match-card pending-analysis-card">
+        <div className="card-heading">
+          <div><span className="kicker">证据匹配概览</span><h2>简历匹配尚未开始</h2></div>
+        </div>
+        <p>系统只展示你的简历与当前 JD 之间有原文依据的匹配，不与无法验证的“同类候选人”做百分位比较。</p>
+        <button className="primary-button" onClick={onOpen}>去简历定制 →</button>
+      </section>
+    );
+  }
+
+  return (
+    <section className="card match-card">
+      <div className="card-heading">
+        <div><span className="kicker">证据匹配概览</span><h2>只看可核对的匹配与缺口</h2></div>
+        <button className="text-button" onClick={onOpen}>查看完整建议 →</button>
+      </div>
+      <p className="evidence-score-note">不提供候选人排名或虚构匹配分数；以下数量均来自本次 JD 与主简历的原文核对。</p>
+      <div className="evidence-metrics">
+        <div><strong>{analysis.matches.length}</strong><span>已有简历证据</span></div>
+        <div><strong>{analysis.suggestions.length}</strong><span>可确认修改</span></div>
+        <div><strong>{analysis.gaps.length}</strong><span>暂未提供证据</span></div>
+      </div>
+    </section>
+  );
+}
+
+function buildTailoredResume(masterResume: string, analysis?: ResumeAnalysis) {
+  if (!analysis) return masterResume;
+  return analysis.accepted.reduce((content, index) => {
+    const suggestion = analysis.suggestions[index];
+    return suggestion && content.includes(suggestion.original)
+      ? content.replace(suggestion.original, suggestion.revised)
+      : content;
+  }, masterResume);
+}
+
+function exportResumePdf(content: string, fileName: string) {
+  const popup = window.open("", "_blank");
+  if (!popup) return false;
+  popup.opener = null;
+  const escaped = content
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+  const safeTitle = fileName.replace(/[<>:"/\\|?*]+/gu, "-");
+  popup.document.write(`<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>${safeTitle}</title>
+  <style>
+    @page { size: A4; margin: 15mm 16mm; }
+    body { margin: 0; color: #172033; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; }
+    main { white-space: pre-wrap; font-size: 10.5pt; line-height: 1.55; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body><main>${escaped}</main><script>window.onload=()=>window.print();<\/script></body>
+</html>`);
+  popup.document.close();
+  return true;
+}
+
 function ResumePanel({
   job,
   masterResume,
+  masterResumeName,
   analysis,
-  onMasterResumeChange,
   onAnalysis,
   onResetAnalysis,
   onSaveVersion,
+  onOpenResumeCenter,
   onAction,
 }: {
   job: JobRecord;
   masterResume: string;
+  masterResumeName: string;
   analysis?: ResumeAnalysis;
-  onMasterResumeChange: (value: string) => void;
   onAnalysis: (analysis: ResumeAnalysis) => void;
   onResetAnalysis: () => void;
-  onSaveVersion: (analysis: ResumeAnalysis) => void;
+  onSaveVersion: (analysis: ResumeAnalysis, content: string) => void;
+  onOpenResumeCenter: () => void;
   onAction: (message: string) => void;
 }) {
-  const [draft, setDraft] = useState(masterResume);
+  const [tailoredResume, setTailoredResume] = useState(() => buildTailoredResume(masterResume, analysis));
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState("");
   const [signInPath, setSignInPath] = useState("");
@@ -1008,17 +1078,16 @@ function ResumePanel({
       setError("这个岗位没有保存原始 JD，请先用“粘贴 JD 文本”收录一个真实岗位。");
       return;
     }
-    if (draft.trim().length < 80) {
-      setError("请粘贴较完整的主简历文本，至少 80 个字。");
+    if (masterResume.trim().length < 80) {
+      setError("请先在简历中心导入或录入一份较完整的主简历。");
       return;
     }
-    onMasterResumeChange(draft.trim());
     setIsAnalyzing(true);
     try {
       const response = await fetch("/api/optimize-resume", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resumeText: draft.trim(), jdText: job.rawJd }),
+        body: JSON.stringify({ resumeText: masterResume.trim(), jdText: job.rawJd }),
       });
       const payload = await response.json() as {
         analysis?: Omit<ResumeAnalysis, "accepted">;
@@ -1032,7 +1101,9 @@ function ResumePanel({
         return;
       }
       if (!response.ok || !payload.analysis) throw new Error(payload.error || "分析失败");
-      onAnalysis({ ...payload.analysis, accepted: [] });
+      const nextAnalysis = { ...payload.analysis, accepted: [] };
+      onAnalysis(nextAnalysis);
+      setTailoredResume(masterResume);
       onAction("已完成基于真实 JD 与主简历的匹配分析");
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "AI 简历分析暂时不可用，请稍后重试。");
@@ -1043,9 +1114,22 @@ function ResumePanel({
 
   const toggle = (index: number) => {
     if (!analysis) return;
-    const accepted = analysis.accepted.includes(index)
+    const suggestion = analysis.suggestions[index];
+    const wasAccepted = analysis.accepted.includes(index);
+    const accepted = wasAccepted
       ? analysis.accepted.filter((item) => item !== index)
       : [...analysis.accepted, index];
+    if (suggestion) {
+      setTailoredResume((content) => {
+        if (wasAccepted && content.includes(suggestion.revised)) {
+          return content.replace(suggestion.revised, suggestion.original);
+        }
+        if (!wasAccepted && content.includes(suggestion.original)) {
+          return content.replace(suggestion.original, suggestion.revised);
+        }
+        return content;
+      });
+    }
     onAnalysis({ ...analysis, accepted });
   };
 
@@ -1060,26 +1144,33 @@ function ResumePanel({
   }
 
   if (!analysis) {
+    if (!masterResume.trim()) {
+      return (
+        <div className="resume-empty-state card">
+          <span className="resume-empty-icon">简</span>
+          <h2>先在简历中心建立主简历</h2>
+          <p>主简历只需导入一次。之后每个岗位都会自动读取，不需要重复粘贴。</p>
+          <button className="primary-button" onClick={onOpenResumeCenter}>前往简历中心 →</button>
+        </div>
+      );
+    }
+
     return (
       <div className="panel-stack">
         <div className="section-header-row">
-          <div><span className="kicker">第一步 · 建立事实底稿</span><h2>粘贴你的主简历</h2><p>简历只保存在当前浏览器；点击分析时才会与当前 JD 一起临时发送给模型。</p></div>
+          <div><span className="kicker">主简历已就绪</span><h2>直接分析当前岗位</h2><p>本岗位会读取简历中心的主简历，无需再次粘贴。</p></div>
         </div>
-        <section className="card resume-import-card">
-          <div className="resume-import-heading">
-            <div><strong>中文主简历</strong><span>{draft.trim().length.toLocaleString()} 字</span></div>
-            <small>支持直接从 Word、PDF 或招聘网站复制文本</small>
-          </div>
-          <textarea
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder={"请粘贴完整简历文本，包括教育、实习、项目、校园经历和技能。\n\n系统不会自动补造不存在的经历或数字。"}
-            aria-label="主简历文本"
-          />
-          <div className="resume-consent-line"><span>▣</span><p><strong>本地优先</strong>：正文保存在当前浏览器；只有你点击下方按钮时，当前 JD 与简历才会用于本次分析，服务端不保存。</p></div>
-          {error && <div className="resume-analysis-error" role="alert"><strong>{error}</strong>{signInPath && <button className="primary-button" onClick={() => window.location.assign(signInPath)}>使用 ChatGPT 登录</button>}</div>}
+        <section className="card resume-source-card">
+          <div className="resume-source-file"><span>W</span><div><strong>{masterResumeName}</strong><small>{masterResume.length.toLocaleString()} 字 · 从简历中心自动读取</small></div></div>
+          <button className="text-button" onClick={onOpenResumeCenter}>查看或更新主简历</button>
+          <div className="resume-consent-line"><span>▣</span><p><strong>本地优先</strong>：正文保存在当前浏览器；只有点击分析时，当前 JD 与主简历才会临时发送给模型，服务端不保存。</p></div>
+          {error && (
+            <div className="resume-analysis-error" role="alert">
+              <strong>{error}</strong>
+              {signInPath && <button className="primary-button" onClick={() => window.location.assign(signInPath)}>使用 ChatGPT 登录</button>}
+            </div>
+          )}
           <div className="resume-import-actions">
-            <button className="secondary-button" onClick={() => { onMasterResumeChange(draft.trim()); onAction("主简历已保存在当前浏览器"); }}>仅保存到本地</button>
             <button className="primary-button" disabled={isAnalyzing} onClick={analyze}>{isAnalyzing ? "正在核对事实与 JD…" : "开始 AI 匹配分析 →"}</button>
           </div>
         </section>
@@ -1090,8 +1181,15 @@ function ResumePanel({
   return (
     <div className="panel-stack">
       <div className="section-header-row">
-        <div><span className="kicker">岗位专属版本</span><h2>简历匹配与修改建议</h2><p>每条建议都绑定主简历原文和 JD 原文，只有你采纳后才写入新版本。</p></div>
-        <div className="header-buttons"><button className="secondary-button" onClick={onResetAnalysis}>重新分析</button><button className="primary-button" disabled={!analysis.accepted.length} onClick={() => onSaveVersion(analysis)}>保存为岗位专属版本</button></div>
+        <div><span className="kicker">岗位专属版本</span><h2>左侧确认建议，右侧同步编辑</h2><p>采纳建议会立即写入右侧副本；你也可以继续直接修改。主简历不会被覆盖。</p></div>
+        <div className="header-buttons">
+          <button className="secondary-button" onClick={onResetAnalysis}>重新分析</button>
+          <button className="secondary-button" onClick={() => {
+            const opened = exportResumePdf(tailoredResume, `${job.company}-${job.title}-岗位专属简历`);
+            onAction(opened ? "已打开打印窗口，请选择“存储为 PDF”" : "浏览器拦截了打印窗口，请允许弹窗后重试");
+          }}>导出 PDF</button>
+          <button className="primary-button" disabled={tailoredResume.trim().length < 80} onClick={() => onSaveVersion(analysis, tailoredResume.trim())}>完成修改并保存版本</button>
+        </div>
       </div>
 
       <section className="resume-analysis-overview card">
@@ -1134,9 +1232,15 @@ function ResumePanel({
               <div className="suggestion-top"><span>建议 {index + 1}</span><strong>{item.title}</strong><button onClick={() => toggle(index)}>{analysis.accepted.includes(index) ? "已采纳 ✓" : "采纳建议"}</button></div>
               <div className="diff-block old"><span>原表述</span><p>{item.original}</p></div>
               <div className="diff-block new"><span>建议表述</span><textarea value={item.revised} onChange={(event) => {
+                const previousRevision = item.revised;
                 const suggestions = analysis.suggestions.map((suggestion, suggestionIndex) => (
                   suggestionIndex === index ? { ...suggestion, revised: event.target.value } : suggestion
                 ));
+                if (analysis.accepted.includes(index)) {
+                  setTailoredResume((content) => content.includes(previousRevision)
+                    ? content.replace(previousRevision, event.target.value)
+                    : content);
+                }
                 onAnalysis({ ...analysis, suggestions });
               }} aria-label={`建议 ${index + 1} 的修改后表述`} /></div>
               <div className="suggestion-reason"><strong>为什么改</strong><p>{item.reason}</p></div>
@@ -1145,12 +1249,13 @@ function ResumePanel({
           ))}
           {!analysis.suggestions.length && <div className="resume-empty-suggestions card"><strong>没有生成可安全写入的修改建议</strong><p>系统宁可留空，也不会用缺少原文依据的内容改写简历。</p></div>}
         </div>
-        <aside className="resume-summary card">
-          <div className="summary-score"><span>本次采纳</span><strong>{analysis.accepted.length} <i>/</i> {analysis.suggestions.length}</strong></div>
-          <div className="mini-divider" />
-          <h3>修改原则</h3>
-          <ul><li>不新增不存在的经历</li><li>新增数字会被自动拒绝</li><li>主简历永远不会被覆盖</li></ul>
-          <div className="version-box"><span>基于</span><strong>当前浏览器中的主简历</strong><small>{masterResume.length.toLocaleString()} 字</small></div>
+        <aside className="resume-editor-preview card">
+          <div className="resume-editor-heading"><div><span>岗位专属简历草稿</span><strong>实时同步</strong></div><small>{tailoredResume.length.toLocaleString()} 字</small></div>
+          <textarea value={tailoredResume} onChange={(event) => setTailoredResume(event.target.value)} aria-label="岗位专属简历完整编辑框" />
+          <div className="resume-editor-footer">
+            <span>已采纳 {analysis.accepted.length} / {analysis.suggestions.length} 条建议</span>
+            <small>可直接编辑 · 不影响主简历</small>
+          </div>
         </aside>
       </div>
     </div>
@@ -1159,19 +1264,26 @@ function ResumePanel({
 
 function ResumeCenter({
   masterResume,
+  masterResumeName,
   versions,
   onMasterResumeChange,
+  onMasterResumeImport,
   onOpenJob,
   onClear,
   onAction,
 }: {
   masterResume: string;
+  masterResumeName: string;
   versions: ResumeVersion[];
   onMasterResumeChange: (value: string) => void;
+  onMasterResumeImport: (name: string, content: string) => void;
   onOpenJob: (jobId: string) => void;
   onClear: () => void;
   onAction: (message: string) => void;
 }) {
+  const [isImporting, setIsImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState("");
+
   return (
     <div className="resume-center-page">
       <section className="list-heading">
@@ -1182,13 +1294,48 @@ function ResumeCenter({
       <div className="resume-center-grid">
         <section className="card master-resume-card">
           <div className="card-heading"><div><span className="kicker">主简历</span><h2>中文主简历 V1</h2></div><span className="local-only-badge">仅当前浏览器</span></div>
+          <div className="word-import-box">
+            <div><span className="word-file-icon">W</span><div><strong>{masterResume ? masterResumeName : "导入 Word 主简历"}</strong><small>.docx 文件只在当前浏览器解析，不上传原文件</small></div></div>
+            <label className="secondary-button">
+              {isImporting ? "正在解析…" : masterResume ? "更换 Word" : "选择 Word 文件"}
+              <input
+                type="file"
+                accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                disabled={isImporting}
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (!file) return;
+                  if (!file.name.toLowerCase().endsWith(".docx")) {
+                    setImportMessage("当前只支持 .docx；旧版 .doc 请先在 Word 中另存为 .docx。");
+                    return;
+                  }
+                  setIsImporting(true);
+                  setImportMessage("");
+                  try {
+                    const mammoth = await import("mammoth");
+                    const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+                    const content = result.value.trim();
+                    if (content.length < 80) throw new Error("Word 中可读取的简历正文不足 80 字。");
+                    onMasterResumeImport(file.name, content);
+                    setImportMessage(`已读取 ${content.length.toLocaleString()} 字；请在下方核对格式与内容。`);
+                  } catch (importError) {
+                    setImportMessage(importError instanceof Error ? importError.message : "Word 解析失败，请重试。");
+                  } finally {
+                    setIsImporting(false);
+                  }
+                }}
+              />
+            </label>
+          </div>
+          {importMessage && <p className="word-import-message" role="status">{importMessage}</p>}
           <textarea
             value={masterResume}
             onChange={(event) => onMasterResumeChange(event.target.value)}
-            placeholder="粘贴主简历文本后，可在任一真实岗位的“简历定制”中开始分析。"
+            placeholder="导入 .docx 后会在这里显示提取结果；也可以直接粘贴或编辑主简历文本。"
             aria-label="简历中心主简历"
           />
-          <div className="master-resume-footer"><span>{masterResume.length.toLocaleString()} 字 · 自动保存到本地</span><button className="secondary-button" onClick={() => onAction("主简历已保存在当前浏览器")}>确认保存</button></div>
+          <div className="master-resume-footer"><span>{masterResume.length.toLocaleString()} 字 · 自动保存到本地 · 所有岗位共用</span><button className="secondary-button" onClick={() => onAction("主简历已保存在当前浏览器，后续岗位会自动读取")}>确认保存</button></div>
         </section>
 
         <section className="card resume-version-list">
@@ -1197,7 +1344,10 @@ function ResumeCenter({
             <article key={version.id}>
               <div className="version-mark">简</div>
               <div><strong>{version.name}</strong><span>{version.createdAt} · 采纳 {version.acceptedCount} 条建议</span></div>
-              <button className="text-button" onClick={() => onOpenJob(version.jobId)}>返回岗位</button>
+              <div className="version-actions"><button className="text-button" onClick={() => {
+                const opened = exportResumePdf(version.content, version.name);
+                onAction(opened ? "已打开打印窗口，请选择“存储为 PDF”" : "浏览器拦截了打印窗口，请允许弹窗后重试");
+              }}>导出 PDF</button><button className="text-button" onClick={() => onOpenJob(version.jobId)}>返回岗位</button></div>
               <details><summary>查看版本正文</summary><p>{version.content}</p></details>
             </article>
           )) : (

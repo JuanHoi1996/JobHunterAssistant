@@ -16,7 +16,7 @@ test("turns quota failures into an actionable message without exposing upstream 
   });
 
   assert.equal(result.errorCode, "openai_quota");
-  assert.match(result.message, /余额与用量限制/u);
+  assert.match(result.message, /切换 ChatGPT 登录账号不会增加 API 额度/u);
   assert.doesNotMatch(JSON.stringify(result), /sensitive upstream details/u);
 });
 
