@@ -1,4 +1,8 @@
 import { validateResumeAnalysis } from "../../resume-analysis.js";
+import {
+  classifyOpenAIError,
+  classifyOpenAIException,
+} from "../../openai-error.js";
 
 const MODEL = process.env.OPENAI_RESUME_MODEL || "gpt-5.6-terra";
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
@@ -118,8 +122,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "AI 简历分析尚未配置。" }, { status: 503 });
   }
 
+  let modelResponse: Response;
   try {
-    const modelResponse = await fetch(OPENAI_RESPONSES_URL, {
+    modelResponse = await fetch(OPENAI_RESPONSES_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -128,6 +133,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         model: MODEL,
         store: false,
+        reasoning: { effort: "low" },
         input: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: `【岗位 JD】\n${jdText}\n\n【用户主简历】\n${resumeText}` },
@@ -143,8 +149,38 @@ export async function POST(request: Request) {
       }),
       signal: AbortSignal.timeout(30_000),
     });
+  } catch (error) {
+    const classified = classifyOpenAIException(error);
+    console.error("OpenAI resume analysis transport failure", {
+      model: MODEL,
+      ...classified.diagnostic,
+    });
+    return Response.json(
+      { error: classified.message, errorCode: classified.errorCode },
+      { status: classified.status, headers: { "Cache-Control": "no-store" } },
+    );
+  }
 
-    if (!modelResponse.ok) throw new Error(`OpenAI request failed with ${modelResponse.status}`);
+  if (!modelResponse.ok) {
+    let errorPayload: Record<string, unknown> = {};
+    try {
+      errorPayload = await modelResponse.json() as Record<string, unknown>;
+    } catch {
+      // Keep the response body private and classify from the HTTP status.
+    }
+    const classified = classifyOpenAIError(modelResponse.status, errorPayload);
+    console.error("OpenAI resume analysis upstream failure", {
+      model: MODEL,
+      requestId: modelResponse.headers.get("x-request-id") || undefined,
+      ...classified.diagnostic,
+    });
+    return Response.json(
+      { error: classified.message, errorCode: classified.errorCode },
+      { status: classified.status, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
+  try {
     const payload = await modelResponse.json() as Record<string, unknown>;
     const outputText = getOutputText(payload);
     if (!outputText) throw new Error("OpenAI returned no structured output");
@@ -154,9 +190,16 @@ export async function POST(request: Request) {
       { analysis, model: MODEL },
       { headers: { "Cache-Control": "no-store" } },
     );
-  } catch {
+  } catch (error) {
+    console.error("OpenAI resume analysis output failure", {
+      model: MODEL,
+      exceptionName: error instanceof Error ? error.name : "UnknownError",
+    });
     return Response.json(
-      { error: "AI 简历分析暂时不可用，请稍后重试。" },
+      {
+        error: "AI 已返回结果，但结果未通过真实性校验。请稍后重试或精简简历文本。",
+        errorCode: "openai_invalid_output",
+      },
       { status: 502, headers: { "Cache-Control": "no-store" } },
     );
   }
