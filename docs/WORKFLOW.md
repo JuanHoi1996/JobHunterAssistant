@@ -32,6 +32,10 @@ Cursor 或其他工具，也可以通过项目文件恢复完整上下文。
 ## Obsidian 规则
 
 - 文件保存在 `docs/archives/`；
+- 同步副本保存到本机 Obsidian Vault：
+  `/Users/freya/Documents/Obsidian Vault/向前求职Agent/模块归档/`；
+- 每次模块归档完成后，将 `docs/archives/` 中的正式 Markdown 同步到上述目录；
+- 项目目录中的归档是 Git 事实来源，Obsidian 中的文件用于阅读、链接和个人知识管理；
 - 文件名使用 `YYYY-MM-DD-topic-version.md`；
 - 使用 YAML frontmatter 记录日期、状态和标签；
 - 一份归档只对应一个相对独立的模块；
