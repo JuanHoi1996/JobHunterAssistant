@@ -12,11 +12,15 @@ test("connects resume center, local storage and grounded job-specific versions",
   assert.match(page, /type ScreenId = "list" \| "detail" \| "resume-center"/u);
   assert.match(page, /xiangqian\.resumes\.v2/u);
   assert.match(page, /xiangqian\.resume-selections\.v1/u);
+  assert.match(page, /xiangqian\.resume-analyses\.v2/u);
   assert.match(page, /function ResumeCenter/u);
   assert.match(page, /用于本岗位分析的简历/u);
   assert.match(page, /resumes\.map/u);
   assert.match(page, /resumeAnalysisKey/u);
-  assert.match(page, /开始 AI 匹配分析/u);
+  assert.match(page, /开始两阶段 AI 分析/u);
+  assert.match(page, /JD 能力优先级/u);
+  assert.match(page, /原简历可放大的亮点/u);
+  assert.match(page, /值得向你追问的信息/u);
   assert.match(page, /完成修改并保存版本/u);
   assert.match(page, /extractRawText/u);
   assert.match(page, /saveResumeTemplate/u);
@@ -35,6 +39,9 @@ test("connects resume center, local storage and grounded job-specific versions",
   assert.match(route, /oai-authenticated-user-email/u);
   assert.match(route, /isLocalDevelopmentRequest/u);
   assert.match(route, /validateResumeAnalysis/u);
+  assert.match(route, /validateResumeBlueprint/u);
+  assert.match(route, /RESUME_SKILL_EXTENSION/u);
+  assert.match(route, /pipelineVersion: "0\.9"/u);
   assert.match(template, /window\.indexedDB/u);
   assert.match(template, /word\/document\.xml/u);
   assert.match(template, /getResumeTemplate\(resumeId\)/u);

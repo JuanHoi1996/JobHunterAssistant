@@ -60,9 +60,21 @@ type JobRecord = {
 
 type ResumeAnalysis = {
   summary: string;
+  jdPriorities: {
+    title: string;
+    priority: "核心" | "重要" | "加分";
+    jdEvidence: string;
+    interpretation: string;
+  }[];
+  highlights: {
+    title: string;
+    sourceEvidence: string[];
+    value: string;
+    transferableSkills: string[];
+  }[];
   matches: {
     title: string;
-    resumeEvidence: string;
+    resumeEvidence: string[];
     jdEvidence: string;
     explanation: string;
   }[];
@@ -70,13 +82,23 @@ type ResumeAnalysis = {
     title: string;
     jdEvidence: string;
     reason: string;
+    question: string;
+  }[];
+  questions: {
+    question: string;
+    why: string;
+    jdEvidence: string;
   }[];
   suggestions: {
     title: string;
+    rewriteType: "整条重写" | "重点前置" | "结构优化" | "精简表达";
+    priority: "核心" | "重要" | "加分";
     original: string;
+    sourceEvidence: string[];
     revised: string;
     jdEvidence: string;
     reason: string;
+    qualityCheck: string;
   }[];
   accepted: number[];
 };
@@ -114,7 +136,7 @@ const LOCAL_KEYS = {
   masterResumeName: "xiangqian.master-resume-name.v1",
   resumes: "xiangqian.resumes.v2",
   resumeSelections: "xiangqian.resume-selections.v1",
-  analyses: "xiangqian.resume-analyses.v1",
+  analyses: "xiangqian.resume-analyses.v2",
   versions: "xiangqian.resume-versions.v1",
   returnJob: "xiangqian.resume-return-job.v1",
 } as const;
@@ -1306,7 +1328,7 @@ function ResumePanel({
             </div>
           )}
           <div className="resume-import-actions">
-            <button className="primary-button" disabled={isAnalyzing} onClick={analyze}>{isAnalyzing ? "正在核对事实与 JD…" : "开始 AI 匹配分析 →"}</button>
+            <button className="primary-button" disabled={isAnalyzing} onClick={analyze}>{isAnalyzing ? "正在拆解 JD 并盘点全简历亮点…" : "开始两阶段 AI 分析 →"}</button>
           </div>
         </section>
       </div>
@@ -1343,14 +1365,40 @@ function ResumePanel({
         </div>
       </section>
 
+      <div className="resume-strategy-grid">
+        <section className="card strategy-card">
+          <div className="strategy-card-heading"><span>第一阶段</span><h3>JD 能力优先级</h3></div>
+          {analysis.jdPriorities.length ? analysis.jdPriorities.map((item) => (
+            <article key={`${item.title}-${item.jdEvidence}`}>
+              <div><b className={`priority-badge priority-${item.priority}`}>{item.priority}</b><strong>{item.title}</strong></div>
+              <p>{item.interpretation}</p>
+              <small>JD：“{item.jdEvidence}”</small>
+            </article>
+          )) : <p className="empty-finding">暂未提取到可靠的岗位优先级。</p>}
+        </section>
+        <section className="card strategy-card">
+          <div className="strategy-card-heading"><span>第一阶段</span><h3>原简历可放大的亮点</h3></div>
+          {analysis.highlights.length ? analysis.highlights.map((item) => (
+            <article key={`${item.title}-${item.sourceEvidence.join("-")}`}>
+              <strong>{item.title}</strong>
+              <p>{item.value}</p>
+              {item.transferableSkills.length > 0 && (
+                <div className="skill-chip-row">{item.transferableSkills.map((skill) => <span key={skill}>{skill}</span>)}</div>
+              )}
+              {item.sourceEvidence.map((evidence) => <small key={evidence}>简历：“{evidence}”</small>)}
+            </article>
+          )) : <p className="empty-finding">暂未提取到可核对的独特亮点。</p>}
+        </section>
+      </div>
+
       <div className="resume-findings-grid">
         <section className="card grounded-findings">
           <h3>已被简历证明</h3>
           {analysis.matches.length ? analysis.matches.map((item) => (
-            <article key={`${item.title}-${item.resumeEvidence}`}>
+            <article key={`${item.title}-${item.resumeEvidence.join("-")}`}>
               <strong>{item.title}</strong>
               <p>{item.explanation}</p>
-              <small>简历：“{item.resumeEvidence}”</small>
+              {item.resumeEvidence.map((evidence) => <small key={evidence}>简历：“{evidence}”</small>)}
               <small>JD：“{item.jdEvidence}”</small>
             </article>
           )) : <p className="empty-finding">暂未找到可以可靠确认的匹配项。</p>}
@@ -1362,16 +1410,33 @@ function ResumePanel({
               <strong>{item.title}</strong>
               <p>{item.reason}</p>
               <small>JD：“{item.jdEvidence}”</small>
+              {item.question && <em>建议追问：{item.question}</em>}
             </article>
           )) : <p className="empty-finding">没有发现需要单独提示的证据缺口。</p>}
         </section>
       </div>
 
+      {analysis.questions.length > 0 && (
+        <section className="card clarification-card">
+          <div className="strategy-card-heading"><span>补充事实后再写</span><h3>值得向你追问的信息</h3></div>
+          <p>这些问题不会被自动写进简历；补充真实答案后，下一轮才能进一步提升。</p>
+          <div>
+            {analysis.questions.map((item) => (
+              <article key={`${item.question}-${item.jdEvidence}`}>
+                <strong>{item.question}</strong>
+                <span>{item.why}</span>
+                <small>对应 JD：“{item.jdEvidence}”</small>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
       <div className="resume-layout">
         <div className="suggestion-list">
           {analysis.suggestions.map((item, index) => (
             <article className={analysis.accepted.includes(index) ? "suggestion-card accepted" : "suggestion-card"} key={`${item.title}-${item.original}`}>
-              <div className="suggestion-top"><span>建议 {index + 1}</span><strong>{item.title}</strong><button onClick={() => toggle(index)}>{analysis.accepted.includes(index) ? "已采纳 ✓" : "采纳建议"}</button></div>
+              <div className="suggestion-top"><span>建议 {index + 1}</span><b className={`priority-badge priority-${item.priority}`}>{item.priority}</b><i>{item.rewriteType}</i><strong>{item.title}</strong><button onClick={() => toggle(index)}>{analysis.accepted.includes(index) ? "已采纳 ✓" : "采纳建议"}</button></div>
               <div className="diff-block old"><span>原表述</span><p>{item.original}</p></div>
               <div className="diff-block new"><span>建议表述</span><textarea value={item.revised} onChange={(event) => {
                 const previousRevision = item.revised;
@@ -1386,6 +1451,11 @@ function ResumePanel({
                 onAnalysis({ ...analysis, suggestions });
               }} aria-label={`建议 ${index + 1} 的修改后表述`} /></div>
               <div className="suggestion-reason"><strong>为什么改</strong><p>{item.reason}</p></div>
+              <details className="suggestion-evidence-details">
+                <summary>查看用于重写的 {item.sourceEvidence.length} 处简历证据</summary>
+                {item.sourceEvidence.map((evidence) => <p key={evidence}>“{evidence}”</p>)}
+                {item.qualityCheck && <small>质量自检：{item.qualityCheck}</small>}
+              </details>
               <div className="evidence-line"><span>JD 依据</span>“{item.jdEvidence}”<b>已绑定原文·待确认</b></div>
             </article>
           ))}
