@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { buildRuleFieldMeta } from "./job-extraction.js";
 import { parseJobText } from "./job-parser.js";
+import { normalizeStoredResumeAnalysis } from "./resume-analysis.js";
 import {
   clearResumeTemplates,
   exportTailoredResumeWord,
@@ -282,7 +283,16 @@ export default function Home() {
           }
         }
         if (storedSelections) setResumeSelections(JSON.parse(storedSelections) as Record<string, string>);
-        if (storedAnalyses) setResumeAnalyses(JSON.parse(storedAnalyses) as Record<string, ResumeAnalysis>);
+        if (storedAnalyses) {
+          const parsedAnalyses = JSON.parse(storedAnalyses) as Record<string, unknown>;
+          const restoredAnalyses = Object.fromEntries(
+            Object.entries(parsedAnalyses).flatMap(([key, value]) => {
+              const analysis = normalizeStoredResumeAnalysis(value) as ResumeAnalysis | undefined;
+              return analysis ? [[key, analysis]] : [];
+            }),
+          );
+          setResumeAnalyses(restoredAnalyses);
+        }
         if (storedVersions) setResumeVersions(JSON.parse(storedVersions) as ResumeVersion[]);
         if (returnJobId && restoredJobs.some((job) => job.id === returnJobId)) {
           setSelectedJobId(returnJobId);
@@ -335,6 +345,9 @@ export default function Home() {
   const selectedResumeId = resumeSelections[selectedJob.id] ?? resumes[0]?.id ?? "";
   const selectedResume = resumes.find((resume) => resume.id === selectedResumeId);
   const selectedAnalysisKey = resumeAnalysisKey(selectedJob.id, selectedResumeId);
+  const selectedAnalysis = normalizeStoredResumeAnalysis(
+    resumeAnalyses[selectedAnalysisKey],
+  ) as ResumeAnalysis | undefined;
   const overdueJobs = jobRecords.filter((job) => job.status === "待投递" && job.ageHours >= 24);
   const filteredJobs = useMemo(
     () => filter === "全部" ? jobRecords : jobRecords.filter((job) => job.status === filter),
@@ -573,7 +586,7 @@ export default function Home() {
             </div>
 
             <div className="workspace-body">
-              {activeTab === "overview" && <Overview job={selectedJob} analysis={resumeAnalyses[selectedAnalysisKey]} onAction={showToast} onOpenTab={setActiveTab} />}
+              {activeTab === "overview" && <Overview job={selectedJob} analysis={selectedAnalysis} onAction={showToast} onOpenTab={setActiveTab} />}
               {activeTab === "resume" && (
                 <ResumePanel
                   key={`${selectedJob.id}-${selectedResumeId}`}
@@ -581,12 +594,15 @@ export default function Home() {
                   resumes={resumes}
                   selectedResumeId={selectedResumeId}
                   templateReady={templateResumeIds.includes(selectedResumeId)}
-                  analysis={resumeAnalyses[selectedAnalysisKey]}
+                  analysis={selectedAnalysis}
                   onSelectResume={(resumeId) => setResumeSelections((current) => ({
                     ...current,
                     [selectedJob.id]: resumeId,
                   }))}
-                  onAnalysis={(analysis) => setResumeAnalyses((current) => ({ ...current, [selectedAnalysisKey]: analysis }))}
+                  onAnalysis={(analysis) => {
+                    const normalized = normalizeStoredResumeAnalysis(analysis) as ResumeAnalysis;
+                    setResumeAnalyses((current) => ({ ...current, [selectedAnalysisKey]: normalized }));
+                  }}
                   onResetAnalysis={() => setResumeAnalyses((current) => {
                     const next = { ...current };
                     delete next[selectedAnalysisKey];

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  normalizeStoredResumeAnalysis,
   validateResumeAnalysis,
   validateResumeBlueprint,
 } from "../app/resume-analysis.js";
@@ -139,4 +140,36 @@ test("rejects unsupported role and proficiency upgrades", () => {
   }, blueprint);
 
   assert.equal(result.suggestions.length, 0);
+});
+
+test("migrates a partial cached analysis without crashing the V0.9 UI", () => {
+  const migrated = normalizeStoredResumeAnalysis({
+    summary: "旧版分析结果",
+    matches: [{
+      title: "用户分析",
+      resumeEvidence: "整理300条用户反馈",
+      jdEvidence: "分析用户反馈",
+      explanation: "具备直接证据",
+    }],
+    gaps: [{ title: "实验设计", jdEvidence: "实验验证", reason: "暂未体现" }],
+    suggestions: [{
+      title: "旧版建议",
+      original: "用户运营实习：整理300条用户反馈，输出每周问题报告。",
+      revised: "整理300条用户反馈并输出周报。",
+      jdEvidence: "分析用户反馈",
+      reason: "突出分析工作",
+    }],
+    accepted: [0, 9, "0"],
+  });
+
+  assert.deepEqual(migrated.jdPriorities, []);
+  assert.deepEqual(migrated.highlights, []);
+  assert.deepEqual(migrated.questions, []);
+  assert.deepEqual(migrated.matches[0].resumeEvidence, ["整理300条用户反馈"]);
+  assert.deepEqual(migrated.suggestions[0].sourceEvidence, [
+    "用户运营实习：整理300条用户反馈，输出每周问题报告。",
+  ]);
+  assert.equal(migrated.suggestions[0].priority, "重要");
+  assert.equal(migrated.suggestions[0].rewriteType, "整条重写");
+  assert.deepEqual(migrated.accepted, [0]);
 });

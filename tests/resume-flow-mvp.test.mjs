@@ -17,6 +17,7 @@ test("connects resume center, local storage and grounded job-specific versions",
   assert.match(page, /用于本岗位分析的简历/u);
   assert.match(page, /resumes\.map/u);
   assert.match(page, /resumeAnalysisKey/u);
+  assert.match(page, /normalizeStoredResumeAnalysis/u);
   assert.match(page, /开始两阶段 AI 分析/u);
   assert.match(page, /JD 能力优先级/u);
   assert.match(page, /原简历可放大的亮点/u);
