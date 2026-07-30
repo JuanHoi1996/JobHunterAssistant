@@ -73,6 +73,12 @@ const SYSTEM_PROMPT = `你是可信的中文简历优化助手。你会收到一
 7. 输出中文，保持简洁。`;
 
 const allowedToUseModel = (request: Request) => {
+  const hostname = new URL(request.url).hostname;
+  const isLocalDevelopmentRequest =
+    process.env.NODE_ENV !== "production" &&
+    (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1");
+  if (isLocalDevelopmentRequest) return true;
+
   const allowed = (process.env.JOB_AI_ALLOWED_EMAILS || "")
     .split(",")
     .map((email) => email.trim().toLowerCase())

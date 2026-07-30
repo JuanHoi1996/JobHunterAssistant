@@ -24,5 +24,6 @@ test("connects resume center, local storage and grounded job-specific versions",
   assert.doesNotMatch(page, /约 68%/u);
   assert.match(route, /completeJson/u);
   assert.match(route, /oai-authenticated-user-email/u);
+  assert.match(route, /isLocalDevelopmentRequest/u);
   assert.match(route, /validateResumeAnalysis/u);
 });

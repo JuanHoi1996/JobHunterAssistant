@@ -18,3 +18,11 @@ test("keeps JD text as the only available MVP intake method", async () => {
   assert.match(css, /\.capture-method\.unavailable/u);
   assert.match(css, /\.coming-soon-notice/u);
 });
+
+test("permits AI testing only on a non-production localhost request without weakening published access control", async () => {
+  const route = await readFile(new URL("../app/api/extract-job/route.ts", import.meta.url), "utf8");
+
+  assert.match(route, /process\.env\.NODE_ENV !== "production"/u);
+  assert.match(route, /hostname === "localhost"/u);
+  assert.match(route, /oai-authenticated-user-email/u);
+});

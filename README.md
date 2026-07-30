@@ -63,6 +63,9 @@ DEEPSEEK_RESUME_MODEL=deepseek-v4-pro
 切换提供商，避免将同一份 JD 或简历转发给第二家服务。无论选择哪家服务，原文仅在
 用户点击分析时发送，且服务端不记录正文。
 
+本地开发地址（`localhost`）可在非生产环境中使用已配置的模型，而不要求 ChatGPT
+身份请求头；公开部署继续执行登录与 `JOB_AI_ALLOWED_EMAILS` 白名单限制。
+
 This starter does not use `wrangler.jsonc`.
 
 ## 工程结构
