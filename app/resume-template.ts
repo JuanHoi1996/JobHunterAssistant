@@ -7,7 +7,7 @@ import {
 const DB_NAME = "xiangqian-local-documents";
 const DB_VERSION = 1;
 const STORE_NAME = "resume-templates";
-const MASTER_TEMPLATE_ID = "master-resume";
+export const LEGACY_MASTER_TEMPLATE_ID = "master-resume";
 const WORD_NAMESPACE = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
 type ResumeTemplateRecord = {
@@ -53,12 +53,13 @@ const runStoreRequest = async <T>(
   }
 };
 
-export async function saveMasterResumeTemplate(
+export async function saveResumeTemplate(
+  resumeId: string,
   file: File,
   sourceText: string,
 ) {
   const record: ResumeTemplateRecord = {
-    id: MASTER_TEMPLATE_ID,
+    id: resumeId,
     fileName: file.name,
     sourceText,
     file: file.slice(0, file.size, file.type),
@@ -67,21 +68,21 @@ export async function saveMasterResumeTemplate(
   await runStoreRequest("readwrite", (store) => store.put(record));
 }
 
-export async function hasMasterResumeTemplate() {
+export async function hasResumeTemplate(resumeId: string) {
   const record = await runStoreRequest<ResumeTemplateRecord | undefined>(
     "readonly",
-    (store) => store.get(MASTER_TEMPLATE_ID),
+    (store) => store.get(resumeId),
   );
   return Boolean(record?.file?.size);
 }
 
-export async function clearMasterResumeTemplate() {
-  await runStoreRequest("readwrite", (store) => store.delete(MASTER_TEMPLATE_ID));
+export async function clearResumeTemplates() {
+  await runStoreRequest("readwrite", (store) => store.clear());
 }
 
-const getMasterResumeTemplate = () => runStoreRequest<ResumeTemplateRecord | undefined>(
+const getResumeTemplate = (resumeId: string) => runStoreRequest<ResumeTemplateRecord | undefined>(
   "readonly",
-  (store) => store.get(MASTER_TEMPLATE_ID),
+  (store) => store.get(resumeId),
 );
 
 const paragraphTextNodes = (paragraph: Element) => (
@@ -146,10 +147,11 @@ const safeDownloadName = (name: string) => {
 };
 
 export async function exportTailoredResumeWord(
+  resumeId: string,
   targetText: string,
   requestedFileName: string,
 ): Promise<ExportResult> {
-  const template = await getMasterResumeTemplate();
+  const template = await getResumeTemplate(resumeId);
   if (!template?.file?.size) {
     throw new Error("尚未保存原始 Word 模板。请先到简历中心重新选择一次原始 .docx 文件。");
   }
