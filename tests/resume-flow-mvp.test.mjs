@@ -22,7 +22,7 @@ test("connects resume center, local storage and grounded job-specific versions",
   assert.doesNotMatch(page, /归类 300\+ 条用户反馈/u);
   assert.doesNotMatch(page, /高于同类候选人/u);
   assert.doesNotMatch(page, /约 68%/u);
-  assert.match(route, /store: false/u);
+  assert.match(route, /completeJson/u);
   assert.match(route, /oai-authenticated-user-email/u);
   assert.match(route, /validateResumeAnalysis/u);
 });

@@ -15,7 +15,8 @@
 - 简历中心支持在浏览器本地导入一次 `.docx` 主简历；岗位工作区自动复用，并提供“左侧逐条采纳—右侧完整简历同步编辑—保存版本—打印为 PDF”的双栏流程。
 - 匹配概览只展示有原文依据的匹配、修改建议和证据缺口，不提供无法验证的候选人百分位排名。
 - 工作台已提供 ChatGPT 登录、退出和切换入口；登录身份与产品后台 API 额度相互独立。
-- 简历数据当前保存在浏览器本地；AI 分析需使用获授权的 ChatGPT 账号登录，并且模型请求不存储。
+- 简历数据当前保存在浏览器本地；AI 分析需使用获授权的 ChatGPT 账号登录，产品服务端不保存 JD 与简历请求正文。
+- AI 服务默认使用 DeepSeek；服务端通过统一适配层调用，JD 提取与简历分析不会在失败后静默转发给另一家模型。
 - 正在按模块逐步完成产品定义、交互验证和技术实现。
 
 ## 项目资料
@@ -45,6 +46,22 @@ npm install
 npm run dev
 npm run build
 ```
+
+## AI runtime configuration
+
+生产环境密钥只能配置在 Sites 的私密环境变量中，不能写入代码、Git 或
+`.openai/hosting.json`。本地开发可在未提交的 `.env.local` 中配置：
+
+```bash
+AI_PROVIDER=deepseek
+DEEPSEEK_API_KEY=your_key_here
+DEEPSEEK_JOB_MODEL=deepseek-v4-flash
+DEEPSEEK_RESUME_MODEL=deepseek-v4-pro
+```
+
+可选值 `AI_PROVIDER=openai` 仅用于显式迁移或调试；产品不会在一次请求中自动
+切换提供商，避免将同一份 JD 或简历转发给第二家服务。无论选择哪家服务，原文仅在
+用户点击分析时发送，且服务端不记录正文。
 
 This starter does not use `wrangler.jsonc`.
 
