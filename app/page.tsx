@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { buildRuleFieldMeta } from "./job-extraction.js";
 import { parseJobText } from "./job-parser.js";
+import {
+  clearMasterResumeTemplate,
+  exportTailoredResumeWord,
+  hasMasterResumeTemplate,
+  saveMasterResumeTemplate,
+} from "./resume-template";
 
 type TabId = "overview" | "resume" | "letter" | "progress" | "interview";
 type ScreenId = "list" | "detail" | "resume-center";
@@ -202,6 +208,7 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const [masterResume, setMasterResume] = useState("");
   const [masterResumeName, setMasterResumeName] = useState("手动录入");
+  const [masterResumeTemplateReady, setMasterResumeTemplateReady] = useState(false);
   const [resumeAnalyses, setResumeAnalyses] = useState<Record<string, ResumeAnalysis>>({});
   const [resumeVersions, setResumeVersions] = useState<ResumeVersion[]>([]);
   const [session, setSession] = useState<SessionState>({
@@ -247,6 +254,12 @@ export default function Home() {
       .catch(() => {
         // Account controls remain available with their safe default paths.
       });
+  }, []);
+
+  useEffect(() => {
+    hasMasterResumeTemplate()
+      .then(setMasterResumeTemplateReady)
+      .catch(() => setMasterResumeTemplateReady(false));
   }, []);
 
   useEffect(() => {
@@ -316,8 +329,10 @@ export default function Home() {
   const clearLocalResumeData = () => {
     setMasterResume("");
     setMasterResumeName("手动录入");
+    setMasterResumeTemplateReady(false);
     setResumeAnalyses({});
     setResumeVersions([]);
+    void clearMasterResumeTemplate();
     showToast("本地简历与岗位专属版本已清除");
   };
 
@@ -423,6 +438,7 @@ export default function Home() {
           <ResumeCenter
             masterResume={masterResume}
             masterResumeName={masterResumeName}
+            templateReady={masterResumeTemplateReady}
             versions={resumeVersions}
             onMasterResumeChange={(value) => {
               setMasterResume(value);
@@ -432,9 +448,11 @@ export default function Home() {
             onMasterResumeImport={(name, content) => {
               setMasterResumeName(name);
               setMasterResume(content);
+              setMasterResumeTemplateReady(true);
               setResumeAnalyses({});
               showToast("Word 主简历已在当前浏览器完成解析并保存");
             }}
+            onTemplateSaved={() => setMasterResumeTemplateReady(true)}
             onOpenJob={(jobId) => {
               setSelectedJobId(jobId);
               setScreen("detail");
@@ -499,6 +517,7 @@ export default function Home() {
                   job={selectedJob}
                   masterResume={masterResume}
                   masterResumeName={masterResumeName}
+                  templateReady={masterResumeTemplateReady}
                   analysis={resumeAnalyses[selectedJob.id]}
                   onAnalysis={(analysis) => setResumeAnalyses((current) => ({ ...current, [selectedJob.id]: analysis }))}
                   onResetAnalysis={() => setResumeAnalyses((current) => {
@@ -1045,10 +1064,50 @@ function exportResumePdf(content: string, fileName: string) {
   return true;
 }
 
+function TemplateWordExportButton({
+  content,
+  fileName,
+  templateReady,
+  onAction,
+}: {
+  content: string;
+  fileName: string;
+  templateReady: boolean;
+  onAction: (message: string) => void;
+}) {
+  const [isExporting, setIsExporting] = useState(false);
+
+  return (
+    <button
+      className="secondary-button"
+      disabled={isExporting || content.trim().length < 80}
+      title={templateReady ? "保留原 Word 的字体、表格、分栏和页面设置" : "请先在简历中心重新选择一次原始 Word"}
+      onClick={async () => {
+        if (!templateReady) {
+          onAction("请先到简历中心重新选择一次原始 Word，系统需要在本地保存模板");
+          return;
+        }
+        setIsExporting(true);
+        try {
+          const result = await exportTailoredResumeWord(content, fileName);
+          onAction(`已下载原模板 Word，共写入 ${result.updatedParagraphs} 个修改段落`);
+        } catch (exportError) {
+          onAction(exportError instanceof Error ? exportError.message : "原模板 Word 导出失败，请重试");
+        } finally {
+          setIsExporting(false);
+        }
+      }}
+    >
+      {isExporting ? "正在生成 Word…" : "下载原模板 Word"}
+    </button>
+  );
+}
+
 function ResumePanel({
   job,
   masterResume,
   masterResumeName,
+  templateReady,
   analysis,
   onAnalysis,
   onResetAnalysis,
@@ -1059,6 +1118,7 @@ function ResumePanel({
   job: JobRecord;
   masterResume: string;
   masterResumeName: string;
+  templateReady: boolean;
   analysis?: ResumeAnalysis;
   onAnalysis: (analysis: ResumeAnalysis) => void;
   onResetAnalysis: () => void;
@@ -1184,10 +1244,16 @@ function ResumePanel({
         <div><span className="kicker">岗位专属版本</span><h2>左侧确认建议，右侧同步编辑</h2><p>采纳建议会立即写入右侧副本；你也可以继续直接修改。主简历不会被覆盖。</p></div>
         <div className="header-buttons">
           <button className="secondary-button" onClick={onResetAnalysis}>重新分析</button>
+          <TemplateWordExportButton
+            content={tailoredResume}
+            fileName={`${job.company}-${job.title}-岗位专属简历.docx`}
+            templateReady={templateReady}
+            onAction={onAction}
+          />
           <button className="secondary-button" onClick={() => {
             const opened = exportResumePdf(tailoredResume, `${job.company}-${job.title}-岗位专属简历`);
-            onAction(opened ? "已打开打印窗口，请选择“存储为 PDF”" : "浏览器拦截了打印窗口，请允许弹窗后重试");
-          }}>导出 PDF</button>
+            onAction(opened ? "已打开纯文本打印窗口；如需保留原排版，请下载 Word 后另存为 PDF" : "浏览器拦截了打印窗口，请允许弹窗后重试");
+          }}>纯文本 PDF</button>
           <button className="primary-button" disabled={tailoredResume.trim().length < 80} onClick={() => onSaveVersion(analysis, tailoredResume.trim())}>完成修改并保存版本</button>
         </div>
       </div>
@@ -1254,7 +1320,7 @@ function ResumePanel({
           <textarea value={tailoredResume} onChange={(event) => setTailoredResume(event.target.value)} aria-label="岗位专属简历完整编辑框" />
           <div className="resume-editor-footer">
             <span>已采纳 {analysis.accepted.length} / {analysis.suggestions.length} 条建议</span>
-            <small>可直接编辑 · 不影响主简历</small>
+            <small>{templateReady ? "可直接编辑 · 可回写原 Word 模板" : "可直接编辑 · 重新导入原 Word 后可保留模板导出"}</small>
           </div>
         </aside>
       </div>
@@ -1265,18 +1331,22 @@ function ResumePanel({
 function ResumeCenter({
   masterResume,
   masterResumeName,
+  templateReady,
   versions,
   onMasterResumeChange,
   onMasterResumeImport,
+  onTemplateSaved,
   onOpenJob,
   onClear,
   onAction,
 }: {
   masterResume: string;
   masterResumeName: string;
+  templateReady: boolean;
   versions: ResumeVersion[];
   onMasterResumeChange: (value: string) => void;
   onMasterResumeImport: (name: string, content: string) => void;
+  onTemplateSaved: () => void;
   onOpenJob: (jobId: string) => void;
   onClear: () => void;
   onAction: (message: string) => void;
@@ -1295,7 +1365,7 @@ function ResumeCenter({
         <section className="card master-resume-card">
           <div className="card-heading"><div><span className="kicker">主简历</span><h2>中文主简历 V1</h2></div><span className="local-only-badge">仅当前浏览器</span></div>
           <div className="word-import-box">
-            <div><span className="word-file-icon">W</span><div><strong>{masterResume ? masterResumeName : "导入 Word 主简历"}</strong><small>.docx 文件只在当前浏览器解析，不上传原文件</small></div></div>
+            <div><span className="word-file-icon">W</span><div><strong>{masterResume ? masterResumeName : "导入 Word 主简历"}</strong><small>{templateReady ? "原 Word 模板已保存在当前浏览器，可生成岗位专属 Word" : ".docx 只在当前浏览器解析并保存，不上传原文件"}</small></div></div>
             <label className="secondary-button">
               {isImporting ? "正在解析…" : masterResume ? "更换 Word" : "选择 Word 文件"}
               <input
@@ -1314,11 +1384,14 @@ function ResumeCenter({
                   setImportMessage("");
                   try {
                     const mammoth = await import("mammoth");
-                    const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+                    const arrayBuffer = await file.arrayBuffer();
+                    const result = await mammoth.extractRawText({ arrayBuffer });
                     const content = result.value.trim();
                     if (content.length < 80) throw new Error("Word 中可读取的简历正文不足 80 字。");
+                    await saveMasterResumeTemplate(file, content);
                     onMasterResumeImport(file.name, content);
-                    setImportMessage(`已读取 ${content.length.toLocaleString()} 字；请在下方核对格式与内容。`);
+                    onTemplateSaved();
+                    setImportMessage(`已读取 ${content.length.toLocaleString()} 字，并在当前浏览器保存原 Word 模板。`);
                   } catch (importError) {
                     setImportMessage(importError instanceof Error ? importError.message : "Word 解析失败，请重试。");
                   } finally {
@@ -1344,10 +1417,17 @@ function ResumeCenter({
             <article key={version.id}>
               <div className="version-mark">简</div>
               <div><strong>{version.name}</strong><span>{version.createdAt} · 采纳 {version.acceptedCount} 条建议</span></div>
-              <div className="version-actions"><button className="text-button" onClick={() => {
+              <div className="version-actions">
+                <TemplateWordExportButton
+                  content={version.content}
+                  fileName={`${version.name}.docx`}
+                  templateReady={templateReady}
+                  onAction={onAction}
+                />
+                <button className="text-button" onClick={() => {
                 const opened = exportResumePdf(version.content, version.name);
-                onAction(opened ? "已打开打印窗口，请选择“存储为 PDF”" : "浏览器拦截了打印窗口，请允许弹窗后重试");
-              }}>导出 PDF</button><button className="text-button" onClick={() => onOpenJob(version.jobId)}>返回岗位</button></div>
+                onAction(opened ? "已打开纯文本打印窗口；保留模板请使用 Word 导出" : "浏览器拦截了打印窗口，请允许弹窗后重试");
+              }}>纯文本 PDF</button><button className="text-button" onClick={() => onOpenJob(version.jobId)}>返回岗位</button></div>
               <details><summary>查看版本正文</summary><p>{version.content}</p></details>
             </article>
           )) : (

@@ -3,9 +3,10 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("connects resume center, local storage and grounded job-specific versions", async () => {
-  const [page, route] = await Promise.all([
+  const [page, route, template] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/optimize-resume/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/resume-template.ts", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /type ScreenId = "list" \| "detail" \| "resume-center"/u);
@@ -14,8 +15,10 @@ test("connects resume center, local storage and grounded job-specific versions",
   assert.match(page, /开始 AI 匹配分析/u);
   assert.match(page, /完成修改并保存版本/u);
   assert.match(page, /extractRawText/u);
+  assert.match(page, /saveMasterResumeTemplate/u);
   assert.match(page, /岗位专属简历完整编辑框/u);
-  assert.match(page, /导出 PDF/u);
+  assert.match(page, /下载原模板 Word/u);
+  assert.match(page, /纯文本 PDF/u);
   assert.match(page, /退出并切换 ChatGPT 账号/u);
   assert.match(page, /建议 \$\{index \+ 1\} 的修改后表述/u);
   assert.match(page, /已绑定原文·待确认/u);
@@ -26,4 +29,7 @@ test("connects resume center, local storage and grounded job-specific versions",
   assert.match(route, /oai-authenticated-user-email/u);
   assert.match(route, /isLocalDevelopmentRequest/u);
   assert.match(route, /validateResumeAnalysis/u);
+  assert.match(template, /window\.indexedDB/u);
+  assert.match(template, /word\/document\.xml/u);
+  assert.match(template, /exportTailoredResumeWord/u);
 });
