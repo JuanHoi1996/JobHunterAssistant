@@ -1,6 +1,4 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
+# Dependencies
 /node_modules
 /.pnp
 .pnp.*
@@ -10,35 +8,35 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
+# Build and test output
 /coverage
-
-# next.js
 /.next/
 /.vinext/
 /out/
+/dist/
+/.wrangler/
 
-# misc
-.DS_Store
+# Local secrets — commit only the safe example file
+.env*
+!.env.example
 *.pem
+*.key
 
-# debug
+# Editor, operating-system and language-local files
+.DS_Store
+.idea/
+.vscode/
+__pycache__/
+*.py[codz]
+.venv/
+venv/
+
+# Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
 
-# env files (can opt-in for committing if needed)
-.env*
-!.env.example
-
-# vercel
-.vercel
-
-# typescript
-next-env.d.ts
-/dist/
-/.wrangler/
-
-# deployment staging only; product source under work/ResumeFiller is tracked
+# Deployment staging only; product source under work/ResumeFiller is tracked
 /work/site-source/
