@@ -1,0 +1,103 @@
+import type { JobRecord, TabId } from "./types";
+
+export const LOCAL_KEYS = {
+  jobs: "xiangqian.jobs.v1",
+  masterResume: "xiangqian.master-resume.v1",
+  masterResumeName: "xiangqian.master-resume-name.v1",
+  resumes: "xiangqian.resumes.v2",
+  resumeSelections: "xiangqian.resume-selections.v1",
+  analyses: "xiangqian.resume-analyses.v2",
+  versions: "xiangqian.resume-versions.v1",
+  returnJob: "xiangqian.resume-return-job.v1",
+} as const;
+
+export const resumeAnalysisKey = (jobId: string, resumeId: string) => `${jobId}::${resumeId}`;
+
+export const tabs: { id: TabId; label: string; count?: number }[] = [
+  { id: "overview", label: "岗位概览" },
+  { id: "resume", label: "简历定制" },
+  { id: "letter", label: "求职文案", count: 2 },
+  { id: "progress", label: "投递进度" },
+  { id: "interview", label: "面试准备" },
+];
+
+export const navItems = [
+  { icon: "⌂", label: "今日看板" },
+  { icon: "▤", label: "岗位管理", badge: "12" },
+  { icon: "▱", label: "简历中心" },
+  { icon: "◎", label: "面试中心" },
+  { icon: "◇", label: "个人档案" },
+];
+
+export const initialJobs: JobRecord[] = [
+  {
+    id: "bytedance-ops",
+    mark: "字",
+    tone: "blue",
+    company: "字节跳动",
+    title: "商业产品运营（2027 届校招）",
+    location: "上海",
+    employment: "全职",
+    category: "产品 / 运营",
+    discoverySource: "企业官网",
+    captureMethod: "岗位链接",
+    sourceHost: "jobs.bytedance.com",
+    status: "待投递",
+    savedLabel: "今天 10:42",
+    ageHours: 4,
+    materials: "简历已优化 · 文案待确认",
+  },
+  {
+    id: "meituan-user-ops",
+    mark: "美",
+    tone: "green",
+    company: "美团",
+    title: "用户运营实习生",
+    location: "北京",
+    employment: "实习",
+    category: "运营",
+    discoverySource: "微信公众号",
+    captureMethod: "岗位截图",
+    sourceHost: "岗位截图",
+    status: "待投递",
+    savedLabel: "昨天 08:30",
+    ageHours: 31,
+    materials: "JD 已分析 · 简历待优化",
+  },
+  {
+    id: "xiaomi-legal",
+    mark: "米",
+    tone: "orange",
+    company: "小米",
+    title: "法务培训生",
+    location: "北京",
+    employment: "全职",
+    category: "法务",
+    discoverySource: "学校就业网",
+    captureMethod: "JD 文本",
+    sourceHost: "学校就业网",
+    status: "已投递",
+    savedLabel: "7 月 15 日",
+    ageHours: 52,
+    materials: "岗位专属简历 V1",
+    applicationMethod: "企业官网",
+  },
+  {
+    id: "tencent-product",
+    mark: "腾",
+    tone: "violet",
+    company: "腾讯",
+    title: "产品策划培训生",
+    location: "深圳",
+    employment: "全职",
+    category: "产品",
+    discoverySource: "朋友推荐",
+    captureMethod: "插件保存",
+    sourceHost: "join.qq.com",
+    status: "面试中",
+    savedLabel: "7 月 12 日",
+    ageHours: 126,
+    materials: "一面复盘已完成",
+    applicationMethod: "内推",
+  },
+];
