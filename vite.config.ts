@@ -45,8 +45,8 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
-    // vinext CLI passes server.port itself (default 3000) and overrides this.
-    // Keep the real port in package.json: `vinext dev -p 1027`.
+    // vinext CLI sets server.port (default 3000) and overrides this block.
+    // Optional local override: `pnpm exec vinext dev -p <port>` or `vinext start -p <port>`.
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,

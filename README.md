@@ -51,14 +51,18 @@
 ## Quick Start
 
 ```bash
-npm install
-npm run dev
-npm run build
+pnpm install
+pnpm dev
+pnpm build
 ```
 
-本地开发地址：`http://localhost:1027`（`vinext` 默认是 3000；本仓库用 `-p 1027` 避开常见端口冲突）。
+本地开发默认地址：`http://localhost:3000`（vinext 默认端口）。若需换端口：
 
-Windows 说明：`package.json` 的脚本已避免 Unix 风格的 `VAR=value cmd`，可直接在 PowerShell / CMD 里用 `npm run dev`。
+```bash
+pnpm exec vinext dev -p 4000
+```
+
+Windows 说明：`package.json` 的脚本已避免 Unix 风格的 `VAR=value cmd`（该写法在 CMD/PowerShell 下会失败）。Wrangler 日志路径改在 `vite.config.ts` 中设置。请使用项目约定的 **pnpm** 工作流。
 
 ## AI runtime configuration
 
@@ -150,10 +154,10 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 
 ## Useful Commands
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+- `pnpm dev`: start local development
+- `pnpm build`: verify the vinext build output
+- `pnpm test`: build the starter and verify its rendered loading skeleton
+- `pnpm db:generate`: generate Drizzle migrations after schema changes
 
 ## Learn More
 
