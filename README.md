@@ -56,6 +56,10 @@ npm run dev
 npm run build
 ```
 
+本地开发地址：`http://localhost:1027`（`vinext` 默认是 3000；本仓库用 `-p 1027` 避开常见端口冲突）。
+
+Windows 说明：`package.json` 的脚本已避免 Unix 风格的 `VAR=value cmd`，可直接在 PowerShell / CMD 里用 `npm run dev`。
+
 ## AI runtime configuration
 
 生产环境密钥只能配置在 Sites 的私密环境变量中，不能写入代码、Git 或
