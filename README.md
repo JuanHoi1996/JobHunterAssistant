@@ -34,7 +34,7 @@
 - 已确认决策：`docs/DECISIONS.md`
 - 归档与 Git 工作流：`docs/WORKFLOW.md`
 - Obsidian 归档：`docs/archives/`
-- 待确认提案：`docs/proposals/`（含导航 / SPA·MPA 架构讨论）
+- 架构提案：`docs/proposals/`（导航 URL 可寻址方案已确认，见 `docs/DECISIONS.md`）
 - ResumeFiller 插件：`work/ResumeFiller/`
 
 ## 产品原则
