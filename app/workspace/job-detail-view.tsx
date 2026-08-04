@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { normalizeStoredResumeAnalysis } from "../resume-analysis.js";
 import { resumeAnalysisKey, tabs } from "./constants";
+import { shouldInterceptClientNavigation } from "./navigation";
 import {
   InterviewPanel,
   LetterPanel,
@@ -114,6 +115,9 @@ export function JobDetailView({ jobId }: { jobId: string }) {
             role="tab"
             aria-selected={activeTab === tab.id}
             onClick={(event) => {
+              // Plain left-click: replace history so tab switches do not stack.
+              // Cmd/Ctrl/middle-click: keep native Link behavior for new tabs.
+              if (!shouldInterceptClientNavigation(event)) return;
               event.preventDefault();
               setTab(tab.id);
             }}
