@@ -34,6 +34,7 @@
 - 已确认决策：`docs/DECISIONS.md`
 - 归档与 Git 工作流：`docs/WORKFLOW.md`
 - Obsidian 归档：`docs/archives/`
+- 架构提案：`docs/proposals/`（导航 URL 可寻址方案已确认，见 `docs/DECISIONS.md`）
 - ResumeFiller 插件：`work/ResumeFiller/`
 
 ## 产品原则
@@ -51,10 +52,18 @@
 ## Quick Start
 
 ```bash
-npm install
-npm run dev
-npm run build
+pnpm install
+pnpm dev
+pnpm build
 ```
+
+本地开发默认地址：`http://localhost:3000`（vinext 默认端口）。若需换端口：
+
+```bash
+pnpm exec vinext dev -p 4000
+```
+
+Windows 说明：`package.json` 的脚本已避免 Unix 风格的 `VAR=value cmd`（该写法在 CMD/PowerShell 下会失败）。Wrangler 日志路径改在 `vite.config.ts` 中设置。请使用项目约定的 **pnpm** 工作流。
 
 ## AI runtime configuration
 
@@ -146,10 +155,10 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 
 ## Useful Commands
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+- `pnpm dev`: start local development
+- `pnpm build`: verify the vinext build output
+- `pnpm test`: build the starter and verify its rendered loading skeleton
+- `pnpm db:generate`: generate Drizzle migrations after schema changes
 
 ## Learn More
 
