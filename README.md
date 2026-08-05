@@ -5,6 +5,10 @@
 
 ## 当前阶段
 
+- 已确认“先核后壳”的核心 MVP 收缩路线：当前只验证 JD—简历差距分析，不再把未来 SaaS 功能同时暴露给测试者。
+- 下一实施模块是收缩导航与岗位工作区可见范围，只保留岗位列表、JD 文本收录、简历中心、岗位选择简历和 Step 1 分析。
+- Step 1 将独立展示 JD 要求、简历证据、弱证据、缺口和追问；用户回答须作为 `user_confirmed` 事实单独记录，不能伪装成简历原文。
+- 当前继续采用本地优先 Web MVP；产品验证后再建设邀请制账号、每日额度和岗位云存储，简历文本与原始 Word 默认仍保存在本地。
 - 已完成岗位工作区基础原型并发布公开预览。
 - 已完成“新增岗位—信息确认—岗位列表—24 小时提醒”的可点击原型。
 - 已修复 JD 文本收录链路，可从用户粘贴的原文提取字段并保留原文。
@@ -35,6 +39,7 @@
 - 归档与 Git 工作流：`docs/WORKFLOW.md`
 - Obsidian 归档：`docs/archives/`
 - 架构提案：`docs/proposals/`（导航 URL 可寻址方案已确认，见 `docs/DECISIONS.md`）
+- 当前 MVP 范围与交付路线：`docs/proposals/2026-08-05-core-mvp-scope-and-delivery-roadmap.md`
 - ResumeFiller 插件：`work/ResumeFiller/`
 
 ## 产品原则
