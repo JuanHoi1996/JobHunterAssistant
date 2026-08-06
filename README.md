@@ -74,8 +74,8 @@ pnpm exec vinext dev -p 4000
 
 - 打开：`http://localhost:3000/spike`
 - 输入：JD 纯文本 + 简历 `.docx` / `.pdf`（抽文本后可核对）
-- 输出：复用 `/api/optimize-resume` 的结构化修改意见卡片；可复制 Markdown
-- 不做：岗位/简历中心、采纳同步、Word 回写、登录产品壳
+- 输出：经历级意见卡片（`/api/spike/optimize-resume`）；按「前置→建议拿下」排序；可复制 Markdown
+- 实验约束：一张卡一段任职；块内取舍/bullet 重排；不要求段落守恒；不写回 Word
 - 观察笔记：`docs/proposals/2026-08-06-spike-ux-bed-observations.md`（超时、意见粒度等）
 
 意见**质量**仍由产品负责人在主工作台验收；测床只关心步数、等待、扫读与复制回流。

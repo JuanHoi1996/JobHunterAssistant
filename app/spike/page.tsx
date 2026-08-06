@@ -2,40 +2,63 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { normalizeStoredResumeAnalysis } from "../resume-analysis.js";
-import type { ResumeAnalysis } from "../workspace/types";
+import { placementSortRank } from "./experience-unit-analysis.js";
 import { extractResumeTextFromFile } from "./extract-resume-text";
 
+type ExperienceSuggestion = {
+  title: string;
+  rewriteType: string;
+  placement: keyof typeof placementSortRank | string;
+  jdFit: string;
+  original: string;
+  sourceEvidence: string[];
+  revised: string;
+  jdEvidence: string;
+  reason: string;
+  qualityCheck: string;
+};
+
+type ExperienceAnalysis = {
+  summary: string;
+  matches: { title: string; resumeEvidence: string[]; jdEvidence: string; explanation: string }[];
+  gaps: { title: string; jdEvidence: string; reason: string; question: string }[];
+  questions: { question: string; why: string; jdEvidence: string }[];
+  suggestions: ExperienceSuggestion[];
+};
+
 type AnalyzePayload = {
-  analysis?: ResumeAnalysis;
+  analysis?: ExperienceAnalysis;
   error?: string;
   signInPath?: string;
   provider?: string;
   model?: string;
+  pipelineVersion?: string;
 };
 
-function buildMarkdown(analysis: ResumeAnalysis) {
+function buildMarkdown(analysis: ExperienceAnalysis) {
   const lines = [
-    `# 修改意见（测床导出）`,
+    "# 经历级修改意见（测床实验）",
     "",
     analysis.summary ? `概要：${analysis.summary}` : "",
     "",
+    "卡片顺序 = 建议在简历中的前后位置（前置 → 建议拿下），不是修改紧急度。",
+    "",
   ];
   analysis.suggestions.forEach((item, index) => {
-    lines.push(`## ${index + 1}. [${item.priority}] ${item.title}`);
-    lines.push(`类型：${item.rewriteType}`);
+    lines.push(`## ${index + 1}. [${item.placement}] ${item.title}`);
+    lines.push(`类型：${item.rewriteType} · JD匹配：${item.jdFit}`);
     lines.push("");
-    lines.push(`原表述：`);
+    lines.push("原经历块：");
     lines.push(item.original);
     lines.push("");
-    lines.push(`建议：`);
+    lines.push("建议经历块（可含取舍与 bullet 重排）：");
     lines.push(item.revised);
     lines.push("");
     if (item.reason) lines.push(`理由：${item.reason}`);
     lines.push("");
   });
   if (analysis.gaps.length) {
-    lines.push(`## 证据缺口`);
+    lines.push("## 证据缺口");
     analysis.gaps.forEach((gap) => {
       lines.push(`- ${gap.title}：${gap.reason}`);
       if (gap.question) lines.push(`  追问：${gap.question}`);
@@ -54,7 +77,7 @@ export default function SpikeOpinionBedPage() {
   const [error, setError] = useState("");
   const [signInPath, setSignInPath] = useState("");
   const [meta, setMeta] = useState("");
-  const [analysis, setAnalysis] = useState<ResumeAnalysis | null>(null);
+  const [analysis, setAnalysis] = useState<ExperienceAnalysis | null>(null);
   const [copyMessage, setCopyMessage] = useState("");
 
   const canAnalyze = jdText.trim().length >= 20
@@ -66,10 +89,11 @@ export default function SpikeOpinionBedPage() {
 
   const sortedSuggestions = useMemo(() => {
     if (!analysis) return [];
-    const rank = { 核心: 0, 重要: 1, 加分: 2 } as const;
-    return [...analysis.suggestions].sort(
-      (left, right) => rank[left.priority] - rank[right.priority],
-    );
+    return [...analysis.suggestions].sort((left, right) => {
+      const leftRank = placementSortRank[left.placement as keyof typeof placementSortRank] ?? 99;
+      const rightRank = placementSortRank[right.placement as keyof typeof placementSortRank] ?? 99;
+      return leftRank - rightRank;
+    });
   }, [analysis]);
 
   const onPickResume = async (file: File | undefined) => {
@@ -101,7 +125,7 @@ export default function SpikeOpinionBedPage() {
     setAnalysis(null);
     const started = performance.now();
     try {
-      const response = await fetch("/api/optimize-resume", {
+      const response = await fetch("/api/spike/optimize-resume", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -118,16 +142,14 @@ export default function SpikeOpinionBedPage() {
       if (!response.ok || !payload.analysis) {
         throw new Error(payload.error || "分析失败");
       }
-      const next = normalizeStoredResumeAnalysis({
-        ...payload.analysis,
-        accepted: [],
-      }) as ResumeAnalysis;
+      const next = payload.analysis;
       setAnalysis(next);
       const seconds = ((performance.now() - started) / 1000).toFixed(1);
       setMeta([
+        payload.pipelineVersion ?? "spike-experience",
         payload.provider && payload.model ? `${payload.provider} · ${payload.model}` : "",
         `耗时 ${seconds}s`,
-        `${next.suggestions.length} 条意见`,
+        `${next.suggestions.length} 段经历`,
       ].filter(Boolean).join(" · "));
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "分析暂时不可用。");
@@ -150,11 +172,11 @@ export default function SpikeOpinionBedPage() {
     <div className="spike-page">
       <header className="spike-header">
         <div>
-          <p className="spike-kicker">私人 UX 测床 · spike</p>
-          <h1>看 JD，出修改意见</h1>
+          <p className="spike-kicker">私人 UX 测床 · 经历级实验</p>
+          <h1>看 JD，出经历级意见</h1>
           <p className="spike-lead">
-            验收路径是否丝滑：粘贴 JD、上传简历、生成结构化意见。不写回 Word，不进岗位/简历中心。
-            意见质量请在主产品由产品负责人验收。两阶段分析可能需要一到两分钟，请耐心等待。
+            一张卡 = 一段任职/实习（公司头到下一公司头）。块内 bullet 重排与取舍算措辞；
+            卡片顺序按「这段经历该不该靠前」。不要求段落守恒，不写回 Word。
           </p>
         </div>
         <Link className="secondary-button" href="/jobs">回主工作台</Link>
@@ -208,7 +230,7 @@ export default function SpikeOpinionBedPage() {
 
       <div className="spike-actions">
         <button className="primary-button" type="button" disabled={!canAnalyze} onClick={() => void analyze()}>
-          {isAnalyzing ? "正在生成意见（两阶段，可能超过 1 分钟）…" : "生成修改意见"}
+          {isAnalyzing ? "正在生成经历级意见（可能超过 1 分钟）…" : "生成经历级意见"}
         </button>
         {meta && <span className="spike-meta">{meta}</span>}
       </div>
@@ -218,7 +240,7 @@ export default function SpikeOpinionBedPage() {
           <span className="spike-spinner" aria-hidden="true" />
           <div>
             <strong>正在分析</strong>
-            <p>先建蓝图，再出修改意见。通常需要一到两分钟，请勿重复点击。</p>
+            <p>先建蓝图，再按任职经历出卡。通常需要一到两分钟，请勿重复点击。</p>
           </div>
         </div>
       )}
@@ -236,8 +258,11 @@ export default function SpikeOpinionBedPage() {
         <section className="spike-results">
           <div className="spike-results-head">
             <div>
-              <h2>修改意见</h2>
-              <p>{analysis.summary || `${suggestionCount} 条建议；自行决定取舍与措辞，系统不改文件。`}</p>
+              <h2>经历级意见</h2>
+              <p>
+                {analysis.summary
+                  || `${suggestionCount} 段经历；已按「前置 → 建议拿下」排序。块内取舍与 bullet 顺序见右侧建议稿。`}
+              </p>
             </div>
             <button className="secondary-button" type="button" onClick={() => void copyMarkdown()}>
               复制为 Markdown
@@ -247,19 +272,20 @@ export default function SpikeOpinionBedPage() {
 
           <div className="spike-suggestion-list">
             {sortedSuggestions.map((item) => (
-              <article className="card spike-suggestion" key={`${item.title}-${item.original}`}>
+              <article className="card spike-suggestion" key={`${item.title}-${item.original.slice(0, 48)}`}>
                 <div className="spike-suggestion-top">
                   <strong>{item.title}</strong>
-                  <span>{item.priority}</span>
+                  <span>位置：{item.placement}</span>
+                  <span>JD：{item.jdFit}</span>
                   <span>{item.rewriteType}</span>
                 </div>
                 <div className="spike-diff">
                   <div>
-                    <span>原表述</span>
+                    <span>原经历块</span>
                     <p>{item.original}</p>
                   </div>
                   <div>
-                    <span>建议</span>
+                    <span>建议经历块</span>
                     <p>{item.revised}</p>
                   </div>
                 </div>
@@ -267,7 +293,9 @@ export default function SpikeOpinionBedPage() {
               </article>
             ))}
             {!sortedSuggestions.length && (
-              <p className="spike-hint">本次没有返回可展示的修改建议（可能被校验过滤）。可看下方缺口与追问。</p>
+              <p className="spike-hint">
+                本次没有通过校验的经历级建议（常见原因：original 未整段引用任职块）。可看下方缺口与追问。
+              </p>
             )}
           </div>
 
