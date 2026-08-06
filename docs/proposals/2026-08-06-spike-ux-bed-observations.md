@@ -103,17 +103,17 @@ Key 与网络已通（否则会是鉴权/配置错误），是**客户端硬超�
 - 等待态需要可见反馈（按钮文案不够）；宜用轻量 loading，不必上复杂动画。  
 - JD 纯文本；简历 `.docx`/`.pdf` 抽文本；不写回文件。
 
-## 4. 经历级约束实验（spike-experience-0.1）
+## 4. 经历级约束实验（spike-experience-0.2）
 
-测床已改走独立接口 `/api/spike/optimize-resume`（**不改**主站 `/api/optimize-resume`）：
+测床走独立接口 `/api/spike/optimize-resume`（**不改**主站 `/api/optimize-resume`）：
 
 - 建议原子 = 任职经历块（公司头 → 下一公司头）；
-- 块内 bullet 重排 / 压缩删除 = `revised` 内的措辞与取舍；
-- 卡片主排序 = `placement`：前置 → 中位 → 后置 → 建议拿下；
-- `jdFit`（核心/重要/加分）仅作参考标签；
-- **不要求**段落守恒（测床不回写 Word）。
+- 输入定位为「繁历」：不要求全覆盖、不要求段落守恒；
+- **裁量权**：条数、去留、前后顺序由模型按 JD 判断；summary 应交代总策略；
+- 块内 bullet 重排 / 压缩 = `revised`；卡片主排序 = `placement`；
+- `jdFit` 仅参考；校验上限 8 张卡（防止失控，不是鼓励凑满）。
 
-- 验收时重点看：是否仍被拆成多张 bullet 卡；`original` 是否常因未整段引用而被校验丢掉。
+- 验收时重点看：是否仍被拆成多张 bullet 卡；`original` 是否常因未整段引用而被校验丢掉；summary 是否说清取舍。
 - flash 模型经历级输出较长时易 JSON 截断 → `SyntaxError`/502；可改用 pro、重试，或看终端 `stage`/`looksTruncated` 日志。
 - 每次调用会写入 `outputs/spike-runs/*.json`（含 JD/简历/建议全文，gitignore）；攒样本后可交给 Agent 评质量。
 

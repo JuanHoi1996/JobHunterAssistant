@@ -176,11 +176,11 @@ export default function SpikeOpinionBedPage() {
     <div className="spike-page">
       <header className="spike-header">
         <div>
-          <p className="spike-kicker">私人 UX 测床 · 经历级实验</p>
+          <p className="spike-kicker">私人 UX 测床 · 经历级实验 0.2</p>
           <h1>看 JD，出经历级意见</h1>
           <p className="spike-lead">
-            一张卡 = 一段任职/实习（公司头到下一公司头）。块内 bullet 重排与取舍算措辞；
-            卡片顺序按「这段经历该不该靠前」。不要求段落守恒，不写回 Word。
+            输入可以是「繁历」；输出由模型裁量留哪些、砍哪些、谁靠前。一张卡 = 一段任职；
+            块内 bullet 重排与压缩算措辞。不要求全覆盖，不要求段落守恒，不写回 Word。
           </p>
         </div>
         <Link className="secondary-button" href="/jobs">回主工作台</Link>

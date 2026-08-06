@@ -123,7 +123,7 @@ export function validateExperienceUnitAnalysis(resume, jd, raw, blueprint) {
       reason: clean(item?.reason),
       qualityCheck: clean(item?.qualityCheck),
     }];
-  }).slice(0, 6) : [];
+  }).slice(0, 8) : [];
 
   return {
     summary: clean(raw?.summary) || "已完成以任职经历为单位的测床分析。",

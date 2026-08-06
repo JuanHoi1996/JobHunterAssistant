@@ -34,10 +34,12 @@ test("spike experience-unit prompts forbid paragraph conservation and require ex
     new URL("../app/api/spike/optimize-resume/route.ts", import.meta.url),
     "utf8",
   );
-  assert.match(route, /一段任职\/实习\/项目经历/u);
-  assert.match(route, /不要求保持段落数量不变/u);
+  assert.match(route, /一段经历一张卡/u);
+  assert.match(route, /不要求保持段落数量不变|不要求：覆盖简历里每一段经历|不要求段落数量守恒/u);
   assert.match(route, /placement/u);
   assert.match(route, /建议拿下/u);
+  assert.match(route, /自由裁量权|运用之妙存乎一心/u);
   assert.match(route, /writeSpikeRunLog/u);
   assert.doesNotMatch(route, /保持简历段落数量不变/u);
+  assert.doesNotMatch(route, /2—5 段经历/u);
 });
