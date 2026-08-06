@@ -154,7 +154,7 @@ export default function SpikeOpinionBedPage() {
           <h1>看 JD，出修改意见</h1>
           <p className="spike-lead">
             验收路径是否丝滑：粘贴 JD、上传简历、生成结构化意见。不写回 Word，不进岗位/简历中心。
-            意见质量请在主产品由产品负责人验收。
+            意见质量请在主产品由产品负责人验收。两阶段分析可能需要一到两分钟，请耐心等待。
           </p>
         </div>
         <Link className="secondary-button" href="/jobs">回主工作台</Link>
@@ -208,7 +208,7 @@ export default function SpikeOpinionBedPage() {
 
       <div className="spike-actions">
         <button className="primary-button" type="button" disabled={!canAnalyze} onClick={() => void analyze()}>
-          {isAnalyzing ? "正在生成意见…" : "生成修改意见"}
+          {isAnalyzing ? "正在生成意见（两阶段，可能超过 1 分钟）…" : "生成修改意见"}
         </button>
         {meta && <span className="spike-meta">{meta}</span>}
       </div>

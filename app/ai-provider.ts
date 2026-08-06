@@ -44,6 +44,14 @@ export class AiConfigurationError extends Error {
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DEEPSEEK_CHAT_URL = "https://api.deepseek.com/chat/completions";
+const DEFAULT_AI_REQUEST_TIMEOUT_MS = 120_000;
+
+/** Per-request timeout. Resume analysis is two sequential calls; 30s is often too short for pro models. */
+export const getAiRequestTimeoutMs = () => {
+  const configured = Number(process.env.AI_REQUEST_TIMEOUT_MS);
+  if (Number.isFinite(configured) && configured >= 10_000) return Math.floor(configured);
+  return DEFAULT_AI_REQUEST_TIMEOUT_MS;
+};
 
 const providerFromEnvironment = (): AiProviderName => {
   const configured = (process.env.AI_PROVIDER || "deepseek").trim().toLowerCase();
@@ -115,6 +123,7 @@ export async function completeJson(input: JsonCompletionInput): Promise<JsonComp
   const provider = providerFromEnvironment();
   const apiKey = provider === "deepseek" ? process.env.DEEPSEEK_API_KEY : process.env.OPENAI_API_KEY;
   if (!apiKey) throw new AiConfigurationError(`${provider} API key is not configured.`);
+  const timeoutMs = getAiRequestTimeoutMs();
 
   if (provider === "openai") {
     const response = await fetch(OPENAI_RESPONSES_URL, {
@@ -137,7 +146,7 @@ export async function completeJson(input: JsonCompletionInput): Promise<JsonComp
           },
         },
       }),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) {
       throw new AiUpstreamError(response.status, await readErrorPayload(response), response.headers.get("x-request-id") || undefined);
@@ -161,7 +170,7 @@ export async function completeJson(input: JsonCompletionInput): Promise<JsonComp
       max_tokens: input.maxOutputTokens,
       stream: false,
     }),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!response.ok) {
     throw new AiUpstreamError(response.status, await readErrorPayload(response), response.headers.get("x-request-id") || undefined);

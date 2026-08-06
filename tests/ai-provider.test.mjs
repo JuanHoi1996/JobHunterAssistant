@@ -10,5 +10,9 @@ test("uses a server-side DeepSeek JSON adapter without an implicit second-provid
   assert.match(provider, /response_format: \{ type: "json_object" \}/u);
   assert.match(provider, /thinking: \{ type: "disabled" \}/u);
   assert.match(provider, /store: false/u);
+  assert.match(provider, /AbortSignal\.timeout\(timeoutMs\)/u);
+  assert.match(provider, /AI_REQUEST_TIMEOUT_MS/u);
+  assert.match(provider, /DEFAULT_AI_REQUEST_TIMEOUT_MS = 120_000/u);
+  assert.doesNotMatch(provider, /AbortSignal\.timeout\(30_000\)/u);
   assert.doesNotMatch(provider, /catch[\s\S]{0,300}OPENAI_API_KEY/u);
 });
