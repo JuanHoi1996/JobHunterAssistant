@@ -71,3 +71,19 @@ test("workspace shell uses Link for primary navigation targets", async () => {
   assert.match(shell, /href=["']\/resumes["']/u);
   assert.match(shell, /href=\{`\/jobs\/\$\{job\.id\}`\}/u);
 });
+
+test("overview CTAs to resume tab are real links for new-tab open", async () => {
+  const [panels, jobTabLink] = await Promise.all([
+    readFile(new URL("../app/workspace/panels.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/workspace/job-tab-link.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(jobTabLink, /export function JobTabLink/u);
+  assert.match(jobTabLink, /shouldInterceptClientNavigation\(event\)/u);
+  assert.match(jobTabLink, /tab=\$\{tab\}/u);
+
+  assert.match(panels, /JobTabLink jobId=\{job\.id\} tab="resume"/u);
+  assert.match(panels, /去简历定制/u);
+  assert.match(panels, /开始优化简历/u);
+  assert.doesNotMatch(panels, /onClick=\{\(\) => onOpenTab\("resume"\)\}/u);
+});

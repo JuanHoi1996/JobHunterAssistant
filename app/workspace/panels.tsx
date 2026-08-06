@@ -11,6 +11,7 @@ import {
   saveResumeTemplate,
 } from "../resume-template";
 import { LOCAL_KEYS } from "./constants";
+import { JobTabLink } from "./job-tab-link";
 import { emptyFieldMeta } from "./types";
 import type {
   CaptureMethod,
@@ -21,7 +22,6 @@ import type {
   ResumeAnalysis,
   ResumeSource,
   ResumeVersion,
-  TabId,
 } from "./types";
 
 export function JobList({
@@ -341,7 +341,7 @@ export function ApplicationMethodDialog({ job, onClose, onConfirm }: { job: JobR
   );
 }
 
-export function ImportedJobOverview({ job, analysis, onAction, onOpenTab }: { job: JobRecord; analysis?: ResumeAnalysis; onAction: (message: string) => void; onOpenTab: (tab: TabId) => void }) {
+export function ImportedJobOverview({ job, analysis, onAction }: { job: JobRecord; analysis?: ResumeAnalysis; onAction: (message: string) => void }) {
   return (
     <div className="overview-grid">
       <div className="main-column">
@@ -363,7 +363,7 @@ export function ImportedJobOverview({ job, analysis, onAction, onOpenTab }: { jo
           <details className="raw-jd-details"><summary>查看已保存的 JD 原文</summary><p>{job.rawJd}</p></details>
         </section>
 
-        <EvidenceMatchCard analysis={analysis} onOpen={() => onOpenTab("resume")} />
+        <EvidenceMatchCard analysis={analysis} jobId={job.id} />
       </div>
 
       <aside className="right-column">
@@ -371,7 +371,7 @@ export function ImportedJobOverview({ job, analysis, onAction, onOpenTab }: { jo
           <div className="small-card-title"><span className="spark">✦</span><strong>建议下一步</strong><span>刚刚</span></div>
           <h3>先核对岗位信息</h3>
           <p>确认公司、岗位类别、来源渠道和投递邮箱，再开始制作岗位专属材料。</p>
-          <button className="primary-button full" onClick={() => onOpenTab("resume")}>开始准备材料 <span>→</span></button>
+          <JobTabLink jobId={job.id} tab="resume" className="primary-button full">开始准备材料 <span>→</span></JobTabLink>
         </section>
         <section className="card utility-card">
           <div className="small-card-title"><strong>原文保存状态</strong><span className="saved-state">已保存</span></div>
@@ -383,9 +383,9 @@ export function ImportedJobOverview({ job, analysis, onAction, onOpenTab }: { jo
   );
 }
 
-export function Overview({ job, analysis, onAction, onOpenTab }: { job: JobRecord; analysis?: ResumeAnalysis; onAction: (message: string) => void; onOpenTab: (tab: TabId) => void }) {
+export function Overview({ job, analysis, onAction }: { job: JobRecord; analysis?: ResumeAnalysis; onAction: (message: string) => void }) {
   if (job.rawJd) {
-    return <ImportedJobOverview job={job} analysis={analysis} onAction={onAction} onOpenTab={onOpenTab} />;
+    return <ImportedJobOverview job={job} analysis={analysis} onAction={onAction} />;
   }
   return (
     <div className="overview-grid">
@@ -424,7 +424,7 @@ export function Overview({ job, analysis, onAction, onOpenTab }: { job: JobRecor
           </div>
         </section>
 
-        <EvidenceMatchCard analysis={analysis} onOpen={() => onOpenTab("resume")} />
+        <EvidenceMatchCard analysis={analysis} jobId={job.id} />
       </div>
 
       <aside className="right-column">
@@ -434,20 +434,20 @@ export function Overview({ job, analysis, onAction, onOpenTab }: { job: JobRecor
           <p>3 处经历表述可以更贴合 JD，预计需要 8 分钟。</p>
           <div className="task-progress"><span style={{ width: "66%" }} /></div>
           <div className="task-meta"><span>准备度 2 / 3</span><strong>还差一步</strong></div>
-          <button className="primary-button full" onClick={() => onOpenTab("resume")}>开始优化简历 <span>→</span></button>
+          <JobTabLink jobId={job.id} tab="resume" className="primary-button full">开始优化简历 <span>→</span></JobTabLink>
         </section>
 
         <section className="card assets-card">
           <div className="small-card-title"><strong>求职材料</strong><button onClick={() => onAction("材料已刷新")}>刷新</button></div>
-          <button className="asset-row" onClick={() => onOpenTab("resume")}>
+          <JobTabLink jobId={job.id} tab="resume" className="asset-row">
             <span className="file-icon resume">简</span><div><strong>岗位专属简历</strong><small>草稿 V1 · 3 处待确认</small></div><b>→</b>
-          </button>
-          <button className="asset-row" onClick={() => onOpenTab("letter")}>
+          </JobTabLink>
+          <JobTabLink jobId={job.id} tab="letter" className="asset-row">
             <span className="file-icon letter">信</span><div><strong>Cover Letter</strong><small>已生成 · 286 字</small></div><b>→</b>
-          </button>
-          <button className="asset-row" onClick={() => onOpenTab("letter")}>
+          </JobTabLink>
+          <JobTabLink jobId={job.id} tab="letter" className="asset-row">
             <span className="file-icon mail">邮</span><div><strong>求职邮件正文</strong><small>尚未生成</small></div><b>＋</b>
-          </button>
+          </JobTabLink>
         </section>
 
         <section className="card source-card">
@@ -460,7 +460,7 @@ export function Overview({ job, analysis, onAction, onOpenTab }: { job: JobRecor
   );
 }
 
-export function EvidenceMatchCard({ analysis, onOpen }: { analysis?: ResumeAnalysis; onOpen: () => void }) {
+export function EvidenceMatchCard({ analysis, jobId }: { analysis?: ResumeAnalysis; jobId: string }) {
   if (!analysis) {
     return (
       <section className="card match-card pending-analysis-card">
@@ -468,7 +468,7 @@ export function EvidenceMatchCard({ analysis, onOpen }: { analysis?: ResumeAnaly
           <div><span className="kicker">证据匹配概览</span><h2>简历匹配尚未开始</h2></div>
         </div>
         <p>系统只展示你的简历与当前 JD 之间有原文依据的匹配，不与无法验证的“同类候选人”做百分位比较。</p>
-        <button className="primary-button" onClick={onOpen}>去简历定制 →</button>
+        <JobTabLink jobId={jobId} tab="resume" className="primary-button">去简历定制 →</JobTabLink>
       </section>
     );
   }
@@ -477,7 +477,7 @@ export function EvidenceMatchCard({ analysis, onOpen }: { analysis?: ResumeAnaly
     <section className="card match-card">
       <div className="card-heading">
         <div><span className="kicker">证据匹配概览</span><h2>只看可核对的匹配与缺口</h2></div>
-        <button className="text-button" onClick={onOpen}>查看完整建议 →</button>
+        <JobTabLink jobId={jobId} tab="resume" className="text-button">查看完整建议 →</JobTabLink>
       </div>
       <p className="evidence-score-note">不提供候选人排名或虚构匹配分数；以下数量均来自本次 JD 与主简历的原文核对。</p>
       <div className="evidence-metrics">
