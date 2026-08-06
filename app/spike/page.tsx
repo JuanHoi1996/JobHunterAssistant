@@ -213,6 +213,16 @@ export default function SpikeOpinionBedPage() {
         {meta && <span className="spike-meta">{meta}</span>}
       </div>
 
+      {isAnalyzing && (
+        <div className="spike-loading" role="status" aria-live="polite">
+          <span className="spike-spinner" aria-hidden="true" />
+          <div>
+            <strong>正在分析</strong>
+            <p>先建蓝图，再出修改意见。通常需要一到两分钟，请勿重复点击。</p>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="resume-analysis-error spike-error">
           <strong>{error}</strong>

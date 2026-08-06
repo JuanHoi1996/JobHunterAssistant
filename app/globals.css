@@ -270,6 +270,29 @@ a.primary-button, a.secondary-button { display: inline-flex; align-items: center
 .spike-file small { color: #8b94a4; font-size: 11px; }
 .spike-actions { display: flex; align-items: center; gap: 14px; margin: 18px 0 10px; }
 .spike-meta { color: #718091; font-size: 12px; }
+.spike-loading {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin: 8px 0 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--soft-line);
+  border-radius: 12px;
+  background: #f8f9ff;
+}
+.spike-loading strong { display: block; font-size: 13px; }
+.spike-loading p { margin: 4px 0 0; color: #718091; font-size: 12px; line-height: 1.55; }
+.spike-spinner {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  border: 2px solid #d8def7;
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spike-spin .8s linear infinite;
+  flex: 0 0 auto;
+}
+@keyframes spike-spin { to { transform: rotate(360deg); } }
 .spike-error { margin-top: 8px; }
 .spike-results { margin-top: 22px; }
 .spike-results-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
