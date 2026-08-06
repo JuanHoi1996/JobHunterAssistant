@@ -134,7 +134,6 @@ export function JobDetailView({ jobId }: { jobId: string }) {
             job={selectedJob}
             analysis={selectedAnalysis}
             onAction={showToast}
-            onOpenTab={setTab}
           />
         )}
         {activeTab === "resume" && (
