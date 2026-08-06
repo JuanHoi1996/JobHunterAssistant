@@ -23,6 +23,14 @@ html { background: var(--canvas); }
 body { margin: 0; background: var(--canvas); color: var(--ink); font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
 button, select, input { font: inherit; }
 button { color: inherit; }
+a.nav-item, a.recent-job, a.tab, a.text-button, a.primary-button, .breadcrumbs a {
+  text-decoration: none;
+  color: inherit;
+  box-sizing: border-box;
+}
+a.primary-button { display: inline-flex; align-items: center; justify-content: center; }
+.breadcrumbs a { border: 0; background: transparent; cursor: pointer; }
+.breadcrumbs a:hover { color: #5263d0; }
 
 .app-shell { min-height: 100vh; display: flex; }
 .sidebar { position: fixed; inset: 0 auto 0 0; width: 230px; z-index: 10; display: flex; flex-direction: column; background: #141a2a; color: #fff; padding: 24px 16px 18px; }

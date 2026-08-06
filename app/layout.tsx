@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { WorkspaceRoot } from "./workspace/workspace-root";
 import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -28,7 +29,9 @@ export async function generateMetadata(): Promise<Metadata> {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="zh-CN">
-      <body>{children}</body>
+      <body>
+        <WorkspaceRoot>{children}</WorkspaceRoot>
+      </body>
     </html>
   );
 }
