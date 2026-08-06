@@ -68,6 +68,17 @@ pnpm build
 pnpm exec vinext dev -p 4000
 ```
 
+### 私人 UX 测床（`/spike`）
+
+贡献者个人验收路径丝滑度的极简页，**不进入主导航**，默认不当作主产品功能合并标准：
+
+- 打开：`http://localhost:3000/spike`
+- 输入：JD 纯文本 + 简历 `.docx` / `.pdf`（抽文本后可核对）
+- 输出：复用 `/api/optimize-resume` 的结构化修改意见卡片；可复制 Markdown
+- 不做：岗位/简历中心、采纳同步、Word 回写、登录产品壳
+
+意见**质量**仍由产品负责人在主工作台验收；测床只关心步数、等待、扫读与复制回流。
+
 Windows 说明：`package.json` 的脚本已避免 Unix 风格的 `VAR=value cmd`（该写法在 CMD/PowerShell 下会失败）。Wrangler 日志路径改在 `vite.config.ts` 中设置。请使用项目约定的 **pnpm** 工作流。
 
 ## AI runtime configuration
