@@ -16,6 +16,7 @@ import {
   hasConfiguredApiKey,
 } from "../../../ai-provider";
 import { validateExperienceUnitAnalysis } from "../../../spike/experience-unit-analysis.js";
+import { describeModelJsonFailure, parseModelJson } from "../../../parse-model-json.js";
 
 const SIGN_IN_PATH = "/signin-with-chatgpt?return_to=%2Fspike";
 
@@ -232,6 +233,8 @@ export async function POST(request: Request) {
   const model = getConfiguredModel("resume");
   let blueprintCompletion;
   let rewriteCompletion;
+  let parseStage: "blueprint" | "rewrite" = "blueprint";
+  let lastModelOutput = "";
   try {
     blueprintCompletion = await completeJson({
       model,
@@ -241,10 +244,12 @@ export async function POST(request: Request) {
       maxOutputTokens: 3_200,
     });
     if (!blueprintCompletion.outputText) throw new Error("AI returned no blueprint");
+    lastModelOutput = blueprintCompletion.outputText;
+    parseStage = "blueprint";
     const blueprint = validateResumeBlueprint(
       resumeText,
       jdText,
-      JSON.parse(blueprintCompletion.outputText),
+      parseModelJson(blueprintCompletion.outputText),
     );
 
     rewriteCompletion = await completeJson({
@@ -252,13 +257,15 @@ export async function POST(request: Request) {
       systemPrompt: EXPERIENCE_REWRITE_SYSTEM_PROMPT,
       userPrompt: `【岗位 JD】\n${jdText}\n\n【用户所选简历】\n${resumeText}\n\n【已校验分析蓝图】\n${JSON.stringify(blueprint)}`,
       schema: finalAnalysisSchema,
-      maxOutputTokens: 6_500,
+      maxOutputTokens: 8_000,
     });
     if (!rewriteCompletion.outputText) throw new Error("AI returned no rewrite output");
+    lastModelOutput = rewriteCompletion.outputText;
+    parseStage = "rewrite";
     const analysis = validateExperienceUnitAnalysis(
       resumeText,
       jdText,
-      JSON.parse(rewriteCompletion.outputText),
+      parseModelJson(rewriteCompletion.outputText),
       blueprint,
     );
 
@@ -283,6 +290,7 @@ export async function POST(request: Request) {
         provider,
         model,
         exceptionName: error.name,
+        stage: parseStage,
       });
       return Response.json(
         {
@@ -294,15 +302,21 @@ export async function POST(request: Request) {
     }
 
     if (error instanceof SyntaxError) {
+      const shape = describeModelJsonFailure(lastModelOutput);
       console.error("Spike experience-unit AI output failure", {
         provider,
         model,
         exceptionName: error.name,
+        stage: parseStage,
+        ...shape,
       });
       return Response.json(
         {
-          error: "AI 已返回结果，但结果未通过结构校验。请稍后重试或精简简历文本。",
-          errorCode: `${provider}_invalid_output`,
+          error: shape.looksTruncated
+            ? "AI 返回的 JSON 可能被截断（经历级输出较长）。可重试、改用 deepseek-v4-pro，或略缩短简历后再试。"
+            : "AI 返回的内容不是合法 JSON（可能夹杂说明文字）。请重试一次；若频繁出现可改用 deepseek-v4-pro。",
+          errorCode: `${provider}_invalid_json`,
+          stage: parseStage,
         },
         { status: 502, headers: { "Cache-Control": "no-store" } },
       );
@@ -316,7 +330,7 @@ export async function POST(request: Request) {
     console.error("Spike experience-unit AI failure", {
       model,
       requestId: error instanceof AiUpstreamError ? error.requestId : undefined,
-      stage: blueprintCompletion ? "rewrite" : "blueprint",
+      stage: parseStage,
       ...classified.diagnostic,
     });
     return Response.json(

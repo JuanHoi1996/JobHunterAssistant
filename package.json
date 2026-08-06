@@ -9,7 +9,7 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",
-    "test": "pnpm build && node --test tests/job-parser.test.mjs tests/job-extraction.test.mjs tests/job-intake-mvp.test.mjs tests/openai-error.test.mjs tests/ai-provider.test.mjs tests/resume-analysis.test.mjs tests/resume-flow-mvp.test.mjs tests/docx-template.test.mjs tests/nav-routes-phase1.test.mjs tests/spike-ux-bed.test.mjs",
+    "test": "pnpm build && node --test tests/job-parser.test.mjs tests/job-extraction.test.mjs tests/job-intake-mvp.test.mjs tests/openai-error.test.mjs tests/ai-provider.test.mjs tests/resume-analysis.test.mjs tests/resume-flow-mvp.test.mjs tests/docx-template.test.mjs tests/nav-routes-phase1.test.mjs tests/spike-ux-bed.test.mjs tests/parse-model-json.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
