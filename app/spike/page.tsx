@@ -33,6 +33,7 @@ type AnalyzePayload = {
   provider?: string;
   model?: string;
   pipelineVersion?: string;
+  logPath?: string | null;
 };
 
 function buildMarkdown(analysis: ExperienceAnalysis) {
@@ -77,6 +78,7 @@ export default function SpikeOpinionBedPage() {
   const [error, setError] = useState("");
   const [signInPath, setSignInPath] = useState("");
   const [meta, setMeta] = useState("");
+  const [logPath, setLogPath] = useState("");
   const [analysis, setAnalysis] = useState<ExperienceAnalysis | null>(null);
   const [copyMessage, setCopyMessage] = useState("");
 
@@ -122,6 +124,7 @@ export default function SpikeOpinionBedPage() {
     setSignInPath("");
     setCopyMessage("");
     setMeta("");
+    setLogPath("");
     setAnalysis(null);
     const started = performance.now();
     try {
@@ -134,6 +137,7 @@ export default function SpikeOpinionBedPage() {
         }),
       });
       const payload = await response.json() as AnalyzePayload;
+      if (payload.logPath) setLogPath(payload.logPath);
       if (response.status === 401) {
         setSignInPath(payload.signInPath ?? "");
         setError(payload.error ?? "需要登录后才能分析（本地应配置 Key 并免登录）。");
@@ -234,6 +238,13 @@ export default function SpikeOpinionBedPage() {
         </button>
         {meta && <span className="spike-meta">{meta}</span>}
       </div>
+      {logPath && (
+        <p className="spike-hint">
+          本次运行已写入本地日志：
+          <code>{logPath}</code>
+          （目录 gitignore；攒几份后可让 Agent 对照评改写质量）
+        </p>
+      )}
 
       {isAnalyzing && (
         <div className="spike-loading" role="status" aria-live="polite">

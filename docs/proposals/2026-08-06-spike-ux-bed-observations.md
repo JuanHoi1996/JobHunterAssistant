@@ -115,6 +115,18 @@ Key 与网络已通（否则会是鉴权/配置错误），是**客户端硬超�
 
 - 验收时重点看：是否仍被拆成多张 bullet 卡；`original` 是否常因未整段引用而被校验丢掉。
 - flash 模型经历级输出较长时易 JSON 截断 → `SyntaxError`/502；可改用 pro、重试，或看终端 `stage`/`looksTruncated` 日志。
+- 每次调用会写入 `outputs/spike-runs/*.json`（含 JD/简历/建议全文，gitignore）；攒样本后可交给 Agent 评质量。
+
+## 5. Prompt 设计分歧备忘（golden case vs philosophy）
+
+贡献者倾向 philosophy + methodology，警惕 golden case 的领域污染；产品负责人倾向 methodology + golden cases。
+
+外部检索（2024–2026 实践口径，非硬科学定论）：
+
+- 厂商标配仍**强烈推荐 few-shot** 来钉格式与决策边界（Anthropic 常建议 3–5 个多样规范例；「一例有时不如零例」）。
+- 污染/过拟合有从业者报告（OpenAI 论坛等）：样例会把风格与内容细节带进无关题；坏样例会放大坏行为。
+- 主流表述是**互补**：原则定「海拔与禁区」，样例定「输出模样」；不是二选一消灭对方。
+- 与本仓相关的折中：原则进 system；若要样例，用**格式骨架/负例**（展示 JSON 形状或「不要近义替换」），避免把「电力交易」等业务隐喻当正例全文塞进 skill。
 
 ## 尚未完成
 

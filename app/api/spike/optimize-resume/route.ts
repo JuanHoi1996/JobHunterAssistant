@@ -16,6 +16,7 @@ import {
   hasConfiguredApiKey,
 } from "../../../ai-provider";
 import { validateExperienceUnitAnalysis } from "../../../spike/experience-unit-analysis.js";
+import { writeSpikeRunLog } from "../../../spike/run-log";
 import { describeModelJsonFailure, parseModelJson } from "../../../parse-model-json.js";
 
 const SIGN_IN_PATH = "/signin-with-chatgpt?return_to=%2Fspike";
@@ -235,6 +236,34 @@ export async function POST(request: Request) {
   let rewriteCompletion;
   let parseStage: "blueprint" | "rewrite" = "blueprint";
   let lastModelOutput = "";
+  const startedAt = Date.now();
+
+  const persistRunLog = async (input: {
+    ok: boolean;
+    error?: string;
+    analysis?: unknown;
+  }) => {
+    try {
+      return await writeSpikeRunLog({
+        pipelineVersion: "spike-experience-0.1",
+        provider,
+        model,
+        stage: parseStage,
+        ok: input.ok,
+        error: input.error,
+        durationMs: Date.now() - startedAt,
+        jdText,
+        resumeText,
+        analysis: input.analysis,
+      });
+    } catch (logError) {
+      console.error("Spike run log write failed", {
+        exceptionName: logError instanceof Error ? logError.name : "unknown",
+      });
+      return null;
+    }
+  };
+
   try {
     blueprintCompletion = await completeJson({
       model,
@@ -269,12 +298,15 @@ export async function POST(request: Request) {
       blueprint,
     );
 
+    const log = await persistRunLog({ ok: true, analysis });
+
     return Response.json(
       {
         analysis,
         model: rewriteCompletion.model,
         provider: rewriteCompletion.provider,
         pipelineVersion: "spike-experience-0.1",
+        logPath: log?.relativePath ?? null,
       },
       { headers: { "Cache-Control": "no-store" } },
     );
@@ -292,10 +324,13 @@ export async function POST(request: Request) {
         exceptionName: error.name,
         stage: parseStage,
       });
+      const message = "AI 已返回结果，但经历级分析没有完整输出。请稍后重试。";
+      const log = await persistRunLog({ ok: false, error: message });
       return Response.json(
         {
-          error: "AI 已返回结果，但经历级分析没有完整输出。请稍后重试。",
+          error: message,
           errorCode: `${provider}_invalid_output`,
+          logPath: log?.relativePath ?? null,
         },
         { status: 502, headers: { "Cache-Control": "no-store" } },
       );
@@ -310,13 +345,16 @@ export async function POST(request: Request) {
         stage: parseStage,
         ...shape,
       });
+      const message = shape.looksTruncated
+        ? "AI 返回的 JSON 可能被截断（经历级输出较长）。可重试、改用 deepseek-v4-pro，或略缩短简历后再试。"
+        : "AI 返回的内容不是合法 JSON（可能夹杂说明文字）。请重试一次；若频繁出现可改用 deepseek-v4-pro。";
+      const log = await persistRunLog({ ok: false, error: message });
       return Response.json(
         {
-          error: shape.looksTruncated
-            ? "AI 返回的 JSON 可能被截断（经历级输出较长）。可重试、改用 deepseek-v4-pro，或略缩短简历后再试。"
-            : "AI 返回的内容不是合法 JSON（可能夹杂说明文字）。请重试一次；若频繁出现可改用 deepseek-v4-pro。",
+          error: message,
           errorCode: `${provider}_invalid_json`,
           stage: parseStage,
+          logPath: log?.relativePath ?? null,
         },
         { status: 502, headers: { "Cache-Control": "no-store" } },
       );
@@ -333,8 +371,13 @@ export async function POST(request: Request) {
       stage: parseStage,
       ...classified.diagnostic,
     });
+    const log = await persistRunLog({ ok: false, error: classified.message });
     return Response.json(
-      { error: classified.message, errorCode: classified.errorCode },
+      {
+        error: classified.message,
+        errorCode: classified.errorCode,
+        logPath: log?.relativePath ?? null,
+      },
       { status: classified.status, headers: { "Cache-Control": "no-store" } },
     );
   }

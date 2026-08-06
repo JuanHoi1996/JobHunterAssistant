@@ -38,5 +38,6 @@ test("spike experience-unit prompts forbid paragraph conservation and require ex
   assert.match(route, /不要求保持段落数量不变/u);
   assert.match(route, /placement/u);
   assert.match(route, /建议拿下/u);
+  assert.match(route, /writeSpikeRunLog/u);
   assert.doesNotMatch(route, /保持简历段落数量不变/u);
 });
