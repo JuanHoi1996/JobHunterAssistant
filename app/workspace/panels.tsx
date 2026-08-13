@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { buildRuleFieldMeta } from "../job-extraction.js";
+import { mergeGapAsks } from "../merge-gap-asks.js";
 import { parseJobText } from "../job-parser.js";
 import { normalizeStoredResumeAnalysis } from "../resume-analysis.js";
 import {
@@ -729,6 +730,8 @@ export function ResumePanel({
     );
   }
 
+  const gapAsks = mergeGapAsks(analysis.gaps, analysis.questions);
+
   return (
     <div className="panel-stack">
       <div className="section-header-row">
@@ -755,7 +758,7 @@ export function ResumePanel({
         <div className="analysis-counts">
           <span><b>{analysis.matches.length}</b> 已匹配</span>
           <span><b>{analysis.suggestions.length}</b> 修改建议</span>
-          <span><b>{analysis.gaps.length}</b> 暂无证据</span>
+          <span><b>{gapAsks.length}</b> 缺口与追问</span>
         </div>
       </section>
 
@@ -798,33 +801,18 @@ export function ResumePanel({
           )) : <p className="empty-finding">暂未找到可以可靠确认的匹配项。</p>}
         </section>
         <section className="card gap-findings">
-          <h3>暂未提供证据</h3>
-          {analysis.gaps.length ? analysis.gaps.map((item) => (
-            <article key={`${item.title}-${item.jdEvidence}`}>
+          <h3>证据缺口与追问</h3>
+          <p className="gap-asks-lead">同一缺口只列一次；追问不会被自动写进简历，确认事实后再进入下一轮。</p>
+          {gapAsks.length ? gapAsks.map((item) => (
+            <article key={`${item.title}-${item.question || item.reason}-${item.jdEvidence}`}>
               <strong>{item.title}</strong>
               <p>{item.reason}</p>
-              <small>JD：“{item.jdEvidence}”</small>
-              {item.question && <em>建议追问：{item.question}</em>}
+              {item.jdEvidence ? <small>JD：“{item.jdEvidence}”</small> : null}
+              {item.question ? <em>追问：{item.question}</em> : null}
             </article>
           )) : <p className="empty-finding">没有发现需要单独提示的证据缺口。</p>}
         </section>
       </div>
-
-      {analysis.questions.length > 0 && (
-        <section className="card clarification-card">
-          <div className="strategy-card-heading"><span>补充事实后再写</span><h3>值得向你追问的信息</h3></div>
-          <p>这些问题不会被自动写进简历；补充真实答案后，下一轮才能进一步提升。</p>
-          <div>
-            {analysis.questions.map((item) => (
-              <article key={`${item.question}-${item.jdEvidence}`}>
-                <strong>{item.question}</strong>
-                <span>{item.why}</span>
-                <small>对应 JD：“{item.jdEvidence}”</small>
-              </article>
-            ))}
-          </div>
-        </section>
-      )}
 
       <div className="resume-layout">
         <div className="suggestion-list">

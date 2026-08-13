@@ -111,7 +111,7 @@ export async function POST(request: Request) {
       systemPrompt: SYSTEM_PROMPT,
       userPrompt: jdText,
       schema: extractionSchema,
-      maxOutputTokens: 1_200,
+      maxOutputTokens: 16_000,
     });
     if (!completion.outputText) throw new Error("AI returned no structured output");
     const modelExtraction = JSON.parse(completion.outputText);

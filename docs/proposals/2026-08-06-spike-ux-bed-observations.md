@@ -103,19 +103,21 @@ Key 与网络已通（否则会是鉴权/配置错误），是**客户端硬超�
 - 等待态需要可见反馈（按钮文案不够）；宜用轻量 loading，不必上复杂动画。  
 - JD 纯文本；简历 `.docx`/`.pdf` 抽文本；不写回文件。
 
-## 4. 经历级约束实验（spike-experience-0.2）
+## 4. 经历级约束实验（spike-experience-0.4 · 投递版形状）
 
 测床走独立接口 `/api/spike/optimize-resume`（**不改**主站 `/api/optimize-resume`）：
 
 - 建议原子 = 任职经历块（公司头 → 下一公司头）；
-- 输入定位为「繁历」：不要求全覆盖、不要求段落守恒；
-- **裁量权**：条数、去留、前后顺序由模型按 JD 判断；summary 应交代总策略；
-- 块内 bullet 重排 / 压缩 = `revised`；卡片主排序 = `placement`；
-- `jdFit` 仅参考；校验上限 8 张卡（防止失控，不是鼓励凑满）。
+- **输出目标 =「这次投递版简历经历区应该长什么样」**，不是「最值得说的建议列表」；
+- `suggestions` = **建议保留**进投递版的经历（`placement` ∈ 前置/中位/后置；可 `原文保留`）；
+- `omit` = **本次别放**的经历（「拿下」只进这里，**禁止**做成经历卡）；omit 勿贴整段长原文；
+- 蓝图强相关 highlights：**服务端强制补卡**（`ensureHighlightKeepSuggestions`），防止「summary 口头保留、suggestions 失踪」；
+- `original` 校验对 NBSP/空白容错；
+- 块内 bullet 重排 / 压缩 = `revised`；卡片主排序 = `placement`。
 
-- 验收时重点看：是否仍被拆成多张 bullet 卡；`original` 是否常因未整段引用而被校验丢掉；summary 是否说清取舍。
-- flash 模型经历级输出较长时易 JSON 截断 → `SyntaxError`/502；可改用 pro、重试，或看终端 `stage`/`looksTruncated` 日志。
-- 每次调用会写入 `outputs/spike-runs/*.json`（含 JD/简历/建议全文，gitignore）；攒样本后可交给 Agent 评质量。
+验收：强相关经历不得因「没什么好改」或 token 花在 omit 上而失踪；弱相关不得以「建议拿下」卡占位。
+
+（0.2 把拿下做成卡；0.3 改 omit 但仍可能口头保留；0.4 加服务端补卡 + omit 瘦身。）
 
 ## 5. Prompt 设计分歧备忘（golden case vs philosophy）
 
@@ -128,9 +130,112 @@ Key 与网络已通（否则会是鉴权/配置错误），是**客户端硬超�
 - 主流表述是**互补**：原则定「海拔与禁区」，样例定「输出模样」；不是二选一消灭对方。
 - 与本仓相关的折中：原则进 system；若要样例，用**格式骨架/负例**（展示 JSON 形状或「不要近义替换」），避免把「电力交易」等业务隐喻当正例全文塞进 skill。
 
+## 6. DeepSeek JSON 截断（已修工程侧）
+
+### 现象
+
+flash / pro 均出现 `SyntaxError` + `looksTruncated: true`；rewrite ~16k 字符、blueprint ~7k 字符处腰斩。
+
+### 根因（不是「没用 JSON 模式」）
+
+- DeepSeek 路径**已启用** `response_format: { type: "json_object" }`（官方 JSON Output）。
+- **没有** OpenAI 式 `json_schema` strict：官方最终回复不支持，强开会 400。
+- Schema 仍靠提示词 + 本地校验；JSON mode **不保证写完**。
+- 官方文档明确：`max_tokens` 过小会截断 JSON。经历级输出含整段 `original`+`revised`，旧上限 blueprint `3200` / rewrite `8000` 极易顶满。
+
+### 已做
+
+- spike：blueprint `16000`、rewrite `48000`；
+- `finish_reason === "length"` → `AiTruncatedOutputError`（与「乱写非 JSON」区分）。
+
+## 7. 证据缺口与追问二合一（展示层）
+
+Step 1 设想里「缺口 = 诊断、追问 = 可填事实入口」；交互未接上时并排两栏高度重复。
+
+- 共用 `mergeGapAsks`：优先缺口卡，重复追问去重，孤立追问才追加。
+- spike / 主站简历分析 UI 合并为「证据缺口与追问」；API 仍保留 `gaps`/`questions` 字段。
+- 等真有「回答 → `user_confirmed`」再拆答题面。
+
+## 8. spike-runs 落盘（Workers 不能写项目盘）
+
+### 现象
+
+`Spike run log write failed`：`cwd: '/bundle'`，`operation not permitted`；目录长期只有 README。
+
+### 根因
+
+`vinext` + Cloudflare 插件下 API 跑在 Workers 虚拟 FS；`node:fs` 只能碰 `/bundle`（只读）与 `/tmp`（请求级），**写不进**仓库 `outputs/`。
+
+### 已做
+
+- API 只组 `runLog` 放进响应；
+- 浏览器 `POST /__dev/spike-run-log`；
+- Vite 插件 `spikeRunLogDev`（Node 侧）写入 `outputs/spike-runs/*.json`。
+- 改 `vite.config.ts` 后需**重启** `pnpm dev`。
+
+## 9. 样本复盘：固收交易员 JD 却漏掉中金固收卡（2026-08-06）
+
+样本：`outputs/spike-runs/2026-08-06T15-55-28-444Z-ok.json`  
+模型：`deepseek-v4-flash` · pipeline `spike-experience-0.2` · 约 91s · ok
+
+### JD / 简历要点
+
+- JD：山东证券自营「交易员」，固定收益投资交易 / 做市 / 资金交易 + 衍生方向；强调债、定价、策略研发、编程。
+- 简历里**最贴**的块：`中金财富证券 | 固定收益部`（REITs 现金流、Repo 杠杆、信用数据、上市复盘）。
+
+### 模型实际产出
+
+| 阶段 | 对「中金固收」的态度 |
+|------|----------------------|
+| `highlights` | **明确写成核心亮点**「固定收益领域实战经验」，证据全是中金四条 bullet |
+| `summary` | 口头承诺「突出…固定收益实战经验」 |
+| `jdPriorities` | 几乎废了：只抽到「学历」和「证券从业优先」，**没抽**投资/做市/资金交易主责 |
+| `matches` | **没有**单独匹配「固收实战」；量化/编程/美股因子反而上了 |
+| `suggestions` 五张卡 | 美股因子（中位）、中行投行（后置）、中信飞鹰（后置）、金域（建议拿下）、媒体（建议拿下） |
+| 缺口追问 | 还在问「有没有债券定价经验」——蓝图刚承认过中金 Repo/REITs |
+
+**结论：不是「没看见中金」，是两阶段脱节 + 裁量权用反了。**
+
+### 怎么想歪的（机制判断）
+
+1. **蓝图认对了，改写没强制消费蓝图**  
+   highlights 已钉死中金；rewrite 提示词给了「可不覆盖、可裁量」，但**没有**「强相关亮点必须出卡 / 不得只在 summary 口头表彰」的硬约束。模型把「提到过」当成「处理过」。
+
+2. **弱经历反而更可能出卡**  
+   「建议拿下」仍各做一张卡（金域、媒体）；最强固收匹配却**整段沉默**。裁量权变成：弱的用卡明示拿下，强的省略——对人眼是最差组合（扫卡片看不到中金）。
+
+3. **`jdPriorities` 过瘦，改写锚点漂到「量化/编程」**  
+   JD 正文很长且分多岗；flash 只抽出学历+资格。后续更容易用粤电/美股/系统建设叙事去凑「策略研发+编程」，把「部门名就叫固定收益」的实习挤出卡位。
+
+4. **校验不是元凶**  
+   中金原文在 `resumeText` 里连续可引用；本次 ok 且无丢卡日志痕迹。是**未生成**，不是 `includes` 校验砍掉。
+
+### 对提示词 / 管线的含义
+
+**已在 spike-experience-0.3 落地：**
+
+- 输出目标改为投递版形状；`omit` 承载拿下；suggestions 仅保留项；
+- 允许 `原文保留`（revised 可等于 original）；
+- 蓝图要求 jdPriorities 覆盖主责条线；强相关 highlights 必须进 suggestions。
+
+仍待样本验收：用同一固收 JD 重跑，确认中金出现在保留卡、金域/媒体只在 omit。
+
+## 10. Thinking-max 延迟（预期）
+
+DeepSeek 路径已改为 `thinking: enabled` + `reasoning_effort: max`（可用 `DEEPSEEK_REASONING_EFFORT` 覆盖）。
+
+- 思考内容在 API 的 `reasoning_content`，用户侧仍只解析最终 `content` JSON。
+- 单次 `/spike` 分析 = 蓝图 + 改写两轮，本地实测大约 **数分钟**（常见约 5 分钟量级）；超时默认 `AI_REQUEST_TIMEOUT_MS=600000`。
+- 测床文案已提示「勿重复点击」；验收时按「质量优先、接受长等待」计，不以秒级响应为成功标准。
+
+## 11. 择业偏好多岗打分（`/spike/rank`）
+
+见 `docs/proposals/2026-08-07-spike-preference-job-rank.md`。与简历编排并列的测床能力：专属 SKILL + 主站岗位多选排序。
+
 ## 尚未完成
 
 - [ ] 超时策略是否合入 `main` / `DECISIONS`（或工程归档）  
 - [ ] 「手下 vs 幕僚」是否由产品负责人书面选边，并约束 Step 1 / Step 2 输出形态  
 - [ ] 主站等待态是否与测床对齐  
-- [ ] 经历级实验跑通后，决定是否向主站提案（需同时讨论导出假设）
+- [ ] 经历级实验：用同一固收 JD 验收 0.4（中金应在 suggestions；弱经历只在 omit）— 已有正向样本，可继续攒 run  
+- [ ] 主站是否跟进缺口·追问合并与 JSON `max_tokens`/`finish_reason` 策略  

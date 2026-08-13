@@ -9,6 +9,7 @@ import {
 } from "../../../ai-error.js";
 import {
   AiConfigurationError,
+  AiTruncatedOutputError,
   AiUpstreamError,
   completeJson,
   getConfiguredModel,
@@ -16,7 +17,7 @@ import {
   hasConfiguredApiKey,
 } from "../../../ai-provider";
 import { validateExperienceUnitAnalysis } from "../../../spike/experience-unit-analysis.js";
-import { writeSpikeRunLog } from "../../../spike/run-log";
+import { buildSpikeRunLog } from "../../../spike/run-log";
 import { describeModelJsonFailure, parseModelJson } from "../../../parse-model-json.js";
 
 const SIGN_IN_PATH = "/signin-with-chatgpt?return_to=%2Fspike";
@@ -97,11 +98,11 @@ const suggestionSchema = {
     title: { type: "string" },
     rewriteType: {
       type: "string",
-      enum: ["整段重写", "要点重排", "取舍压缩", "重点前置"],
+      enum: ["原文保留", "整段重写", "要点重排", "取舍压缩", "重点前置"],
     },
     placement: {
       type: "string",
-      enum: ["前置", "中位", "后置", "建议拿下"],
+      enum: ["前置", "中位", "后置"],
     },
     jdFit: { type: "string", enum: ["核心", "重要", "加分"] },
     original: { type: "string" },
@@ -126,6 +127,17 @@ const suggestionSchema = {
   additionalProperties: false,
 } as const;
 
+const omitSchema = {
+  type: "object",
+  properties: {
+    title: { type: "string" },
+    original: { type: "string" },
+    reason: { type: "string" },
+  },
+  required: ["title", "reason"],
+  additionalProperties: false,
+} as const;
+
 const finalAnalysisSchema = {
   type: "object",
   properties: {
@@ -134,8 +146,9 @@ const finalAnalysisSchema = {
     gaps: { type: "array", items: gapSchema },
     questions: { type: "array", items: questionSchema },
     suggestions: { type: "array", items: suggestionSchema },
+    omit: { type: "array", items: omitSchema },
   },
-  required: ["summary", "matches", "gaps", "questions", "suggestions"],
+  required: ["summary", "matches", "gaps", "questions", "suggestions", "omit"],
   additionalProperties: false,
 } as const;
 
@@ -151,16 +164,23 @@ const BLUEPRINT_SYSTEM_PROMPT = `你是资深中文求职策略顾问。先完�
 
 ${TRUST_RULES}
 ${RESUME_ANALYSIS_METHODOLOGY}
-${RESUME_SKILL_EXTENSION}`;
+${RESUME_SKILL_EXTENSION}
 
-const EXPERIENCE_REWRITE_SYSTEM_PROMPT = `你是资深中文求职幕僚，不是逐句润色助手。
-你会收到：真实 JD、一份偏「繁」的完整简历（可能偏长、含弱相关经历）、以及已校验蓝图。
+额外要求（测床）：
+1. jdPriorities 必须覆盖 JD 的主责条线（如投资交易/做市/资金交易/衍生等），不要只抽出学历或「优先条件」。
+2. highlights 中与 JD 强相关的任职/项目，后面改写阶段必须进入投递版经历清单（可原文保留），不得只口头表彰。`;
 
-# 哲学（先于技巧）
+const EXPERIENCE_REWRITE_SYSTEM_PROMPT = `你是资深中文求职幕僚。输出目标不是「最值得说的建议列表」，而是「这份 JD 的投递版简历，经历区应该长什么样」。
+
+你会收到：真实 JD、一份偏「繁」的完整简历、以及已校验蓝图。
+
+# 哲学
 1. 简历是给特定 JD 看的证据目录，不是生平全传；输入可以很繁，输出必须敢取舍。
-2. 好方案 = 在不撒谎的前提下，决定留哪些经历、砍哪些、谁靠前、块内哪条证据上前线；润色只是最后一公里。
-3. 「改了像没改」通常来自只换同义词；你宁可少出几张卡，也要每张卡体现可辩驳的放置与取舍判断。
-4. 运用之妙存乎一心：条数、去留、前后顺序由你根据本份 JD 裁量，不要凑数，也不要机械全覆盖。
+2. suggestions = 建议放进本次投递版的经历块（含顺序与块内改写）；omit = 建议本次别放的经历。
+3. 「拿下」的意思是别放进这次投递版，因此禁止做成 suggestions 卡片；一律写入 omit。
+4. 已经够好的强相关经历也必须出现在 suggestions（可用 rewriteType=原文保留，revised 可与 original 相同）；禁止因为「没什么好改」而沉默——那会让用户看不见它该留在简历里。
+5. 蓝图 highlights 里能对应到具体任职/项目块、且与 JD 强相关的，默认必须进入 suggestions。
+6. summary 里写「保留某某」却不在 suggestions 出卡 = 严重错误；口头保留不算数。
 
 # 诚实硬约束
 ${TRUST_RULES}
@@ -168,41 +188,39 @@ ${RESUME_SKILL_EXTENSION}
 
 # 建议原子：任职/项目经历块（不是 bullet）
 1. 一段经历 = 从公司/组织/项目标题行起，到下一同类标题行之前的全部连续正文（可含多条 bullet）。
-2. suggestion.original 必须是该完整经历块的逐字连续原文，禁止只截一条 bullet 充当 original。
-3. 同一标题下的多条项目描述必须落在同一张卡；禁止把一段经历拆成多张卡。
+2. suggestion.original 必须是该完整经历块的逐字连续原文（含标题行）；禁止只截一条 bullet。
+3. 同一标题下的多条项目描述必须落在同一张 suggestions 卡；禁止拆成多张卡。
 
-# 你有自由裁量权（本实验明确鼓励）
-针对这份 JD，自行决定：
-- 出几张卡（通常宜少而锋利；常见 2—6，按需要可更少或到上限）；
-- 哪些经历值得做卡（强相关要谈；弱相关可用「建议拿下」明示，或在 summary 说明「未单独出卡且建议整段不放」）；
-- 卡片 placement 顺序（这就是简历经历区的建议阅读/摆放顺序）；
-- 块内 bullet 的保留、压缩、删除与重排（均写在 revised 里，算措辞与取舍，不是另开卡）。
+# 生成顺序（很重要，避免 token 花在 omit 上却漏掉强相关保留卡）
+1. 先在内心列出全部「必须保留」的经历标题（含蓝图强相关亮点对应块）；
+2. 再为每一项写出完整 suggestions 对象；
+3. 最后写 omit。omit 只需要 title + reason；original 可省略或只写标题行，禁止把整段长项目原文贴进 omit。
 
-不要求：覆盖简历里每一段经历；不要求段落数量守恒；不要求时间倒序神圣不可侵犯。
+# suggestions（投递版经历区）
+- 只放「建议保留在本次投递版」的经历；常见 3—7 段。
+- placement ∈ 前置 / 中位 / 后置 = 保留经历之间的前后顺序。
+- rewriteType ∈ 原文保留、整段重写、要点重排、取舍压缩、重点前置。
+- 禁止 placement=建议拿下；禁止用 suggestions 表达「别放」。
 
-# revised 允许做什么
-- 要点重排：与 JD 更相关的 bullet 前置；
-- 取舍压缩：删弱相关、合并重复、整段改为更短；
-- 重点前置 / 整段重写：在不虚构前提下改表述；
-- revised 可以明显短于 original；placement=建议拿下 时，revised 可为极短保留句或说明性压缩稿（仍不得编造事实）。
+# omit（本次别放）
+- 列出建议从本次投递版拿下的经历。
+- 字段：title、reason；original 可选（标题行即可）。
+- 不要把 omit 项再复制进 suggestions。
 
-# placement（卡片主排序键 = 「这段经历该不该靠前」）
-- 前置：相对其他经历应更靠前；
-- 中位：中段即可；
-- 后置：应更靠后；
-- 建议拿下：对当前 JD 价值过低，建议大幅压缩或从投递版拿下。
-禁止用「修改有多紧急」当排序理由。
+# 裁量权（在「简历长什么样」框架内）
+你可以决定留谁、砍谁、谁靠前、块内哪条证据上前线；但强相关保留项不得缺席，弱相关拿下不得占卡。
+不要求：机械覆盖繁历每一段；不要求段落数量守恒；不要求时间倒序神圣不可侵犯。
 
 jdFit（核心/重要/加分）只表示与 JD 的匹配强度，供参考，不是主排序键。
 
 # summary
-用一段话交代你的总策略：面向该 JD 你准备突出什么、弱化/拿下什么、为何如此裁量；让用户看见判断，而不是只看见几张互不统属的卡。
+用一段中文短文交代投递版总策略（保留/前置什么、omit 拿下什么）。不要输出思维链，不要把中间分析再序列化成另一份 JSON。
 
 # 输出纪律
-1. rewriteType ∈ 整段重写、要点重排、取舍压缩、重点前置。
-2. reason：说明放置判断 + 块内取舍/重排逻辑 + 与 JD 的关系。
+1. 最终只输出一个 JSON 对象（系统已要求 json_object）；不要在 JSON 外写分析，也不要在 JSON 内再嵌套「思考过程」字段。
+2. reason：说明为何保留/如何放置 + 块内取舍逻辑（suggestions），或为何别放（omit）。
 3. qualityCheck：自检事实、角色词、数字、以及「仍是一段经历一张卡」。
-4. 不为凑满某个数字而制造弱建议；也不要因为害怕裁剪而把繁历原样润色一遍。`;
+4. 不为凑数把弱经历塞进 suggestions；也不要因「建议锋利」而用拿下卡代替 omit。`;
 
 const allowedToUseModel = (request: Request) => {
   const hostname = new URL(request.url).hostname;
@@ -224,8 +242,12 @@ export async function POST(request: Request) {
   let jdText = "";
   try {
     const body = await request.json() as { resumeText?: unknown; jdText?: unknown };
-    resumeText = typeof body.resumeText === "string" ? body.resumeText.trim() : "";
-    jdText = typeof body.jdText === "string" ? body.jdText.trim() : "";
+    resumeText = typeof body.resumeText === "string"
+      ? body.resumeText.trim().replace(/\u00a0/gu, " ").replace(/\u3000/gu, " ")
+      : "";
+    jdText = typeof body.jdText === "string"
+      ? body.jdText.trim().replace(/\u00a0/gu, " ").replace(/\u3000/gu, " ")
+      : "";
   } catch {
     return Response.json({ error: "请求格式无效。" }, { status: 400 });
   }
@@ -256,31 +278,26 @@ export async function POST(request: Request) {
   let lastModelOutput = "";
   const startedAt = Date.now();
 
-  const persistRunLog = async (input: {
+  const buildRunLog = (input: {
     ok: boolean;
     error?: string;
     analysis?: unknown;
-  }) => {
-    try {
-      return await writeSpikeRunLog({
-        pipelineVersion: "spike-experience-0.2",
-        provider,
-        model,
-        stage: parseStage,
-        ok: input.ok,
-        error: input.error,
-        durationMs: Date.now() - startedAt,
-        jdText,
-        resumeText,
-        analysis: input.analysis,
-      });
-    } catch (logError) {
-      console.error("Spike run log write failed", {
-        exceptionName: logError instanceof Error ? logError.name : "unknown",
-      });
-      return null;
-    }
-  };
+    includeModelPreview?: boolean;
+  }) => buildSpikeRunLog({
+    pipelineVersion: "spike-experience-0.4",
+    provider,
+    model,
+    stage: parseStage,
+    ok: input.ok,
+    error: input.error,
+    durationMs: Date.now() - startedAt,
+    jdText,
+    resumeText,
+    analysis: input.analysis,
+    modelOutputPreview: input.includeModelPreview && lastModelOutput
+      ? lastModelOutput.slice(0, 4_000)
+      : undefined,
+  });
 
   try {
     blueprintCompletion = await completeJson({
@@ -288,7 +305,8 @@ export async function POST(request: Request) {
       systemPrompt: BLUEPRINT_SYSTEM_PROMPT,
       userPrompt: `【岗位 JD】\n${jdText}\n\n【用户所选简历】\n${resumeText}`,
       schema: blueprintSchema,
-      maxOutputTokens: 3_200,
+      // Thinking-max shares max_tokens with reasoning_content; leave headroom for final JSON.
+      maxOutputTokens: 64_000,
     });
     if (!blueprintCompletion.outputText) throw new Error("AI returned no blueprint");
     lastModelOutput = blueprintCompletion.outputText;
@@ -304,7 +322,8 @@ export async function POST(request: Request) {
       systemPrompt: EXPERIENCE_REWRITE_SYSTEM_PROMPT,
       userPrompt: `【岗位 JD】\n${jdText}\n\n【用户所选简历】\n${resumeText}\n\n【已校验分析蓝图】\n${JSON.stringify(blueprint)}`,
       schema: finalAnalysisSchema,
-      maxOutputTokens: 8_000,
+      // One card ≈ one full original + revised block; thinking-max needs a large completion budget.
+      maxOutputTokens: 128_000,
     });
     if (!rewriteCompletion.outputText) throw new Error("AI returned no rewrite output");
     lastModelOutput = rewriteCompletion.outputText;
@@ -316,19 +335,38 @@ export async function POST(request: Request) {
       blueprint,
     );
 
-    const log = await persistRunLog({ ok: true, analysis });
-
     return Response.json(
       {
         analysis,
         model: rewriteCompletion.model,
         provider: rewriteCompletion.provider,
-        pipelineVersion: "spike-experience-0.2",
-        logPath: log?.relativePath ?? null,
+        pipelineVersion: "spike-experience-0.4",
+        runLog: buildRunLog({ ok: true, analysis }),
       },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
+    if (error instanceof AiTruncatedOutputError) {
+      console.error("Spike experience-unit AI output truncated by max_tokens", {
+        provider,
+        model,
+        stage: parseStage,
+        finishReason: error.finishReason,
+        outputLength: error.outputLength,
+      });
+      const message =
+        "AI 输出因 max_tokens 被截断，JSON 不完整。已提高上限时可直接重试；若仍失败请略缩短简历或减少经历条数。";
+      return Response.json(
+        {
+          error: message,
+          errorCode: `${provider}_truncated_output`,
+          stage: parseStage,
+          runLog: buildRunLog({ ok: false, error: message, includeModelPreview: true }),
+        },
+        { status: 502, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+
     if (
       !(error instanceof AiUpstreamError)
       && !(error instanceof AiConfigurationError)
@@ -343,12 +381,11 @@ export async function POST(request: Request) {
         stage: parseStage,
       });
       const message = "AI 已返回结果，但经历级分析没有完整输出。请稍后重试。";
-      const log = await persistRunLog({ ok: false, error: message });
       return Response.json(
         {
           error: message,
           errorCode: `${provider}_invalid_output`,
-          logPath: log?.relativePath ?? null,
+          runLog: buildRunLog({ ok: false, error: message }),
         },
         { status: 502, headers: { "Cache-Control": "no-store" } },
       );
@@ -364,15 +401,14 @@ export async function POST(request: Request) {
         ...shape,
       });
       const message = shape.looksTruncated
-        ? "AI 返回的 JSON 可能被截断（经历级输出较长）。可重试、改用 deepseek-v4-pro，或略缩短简历后再试。"
-        : "AI 返回的内容不是合法 JSON（可能夹杂说明文字）。请重试一次；若频繁出现可改用 deepseek-v4-pro。";
-      const log = await persistRunLog({ ok: false, error: message });
+        ? "AI 返回的 JSON 在解析前已不完整（常见原因是 max_tokens 截断）。请重试；若仍失败请略缩短简历。"
+        : "AI 返回的内容不是合法 JSON（可能夹杂说明文字）。请重试一次。";
       return Response.json(
         {
           error: message,
           errorCode: `${provider}_invalid_json`,
           stage: parseStage,
-          logPath: log?.relativePath ?? null,
+          runLog: buildRunLog({ ok: false, error: message, includeModelPreview: true }),
         },
         { status: 502, headers: { "Cache-Control": "no-store" } },
       );
@@ -389,12 +425,11 @@ export async function POST(request: Request) {
       stage: parseStage,
       ...classified.diagnostic,
     });
-    const log = await persistRunLog({ ok: false, error: classified.message });
     return Response.json(
       {
         error: classified.message,
         errorCode: classified.errorCode,
-        logPath: log?.relativePath ?? null,
+        runLog: buildRunLog({ ok: false, error: classified.message }),
       },
       { status: classified.status, headers: { "Cache-Control": "no-store" } },
     );

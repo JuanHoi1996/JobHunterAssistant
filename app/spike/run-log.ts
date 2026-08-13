@@ -1,6 +1,3 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-
 export type SpikeRunLogPayload = {
   pipelineVersion: string;
   provider: string;
@@ -9,30 +6,52 @@ export type SpikeRunLogPayload = {
   ok: boolean;
   error?: string;
   durationMs?: number;
-  jdText: string;
-  resumeText: string;
+  /** "resume" (default) or "rank" */
+  kind?: "resume" | "rank";
+  jdText?: string;
+  resumeText?: string;
+  preferenceSkill?: string;
+  jobs?: { id: string; company: string; title: string; rawJd: string }[];
   analysis?: unknown;
+  /** Truncated model text on parse failures — useful when JSON was cut mid-stream. */
+  modelOutputPreview?: string;
 };
 
-/**
- * Persist one spike analyze run under outputs/spike-runs/ for offline review.
- * Local-only; directory is gitignored except README.
- */
-export async function writeSpikeRunLog(payload: SpikeRunLogPayload) {
-  const dir = path.join(process.cwd(), "outputs", "spike-runs");
-  await mkdir(dir, { recursive: true });
-  const stamp = new Date().toISOString().replace(/[:.]/gu, "-");
-  const fileName = `${stamp}-${payload.ok ? "ok" : "fail"}.json`;
-  const filePath = path.join(dir, fileName);
-  const body = {
-    savedAt: new Date().toISOString(),
-    ...payload,
-    jdChars: payload.jdText.length,
-    resumeChars: payload.resumeText.length,
-  };
-  await writeFile(filePath, `${JSON.stringify(body, null, 2)}\n`, "utf8");
+export type SpikeRunLogBody = SpikeRunLogPayload & {
+  savedAt?: string;
+  jdChars: number;
+  resumeChars: number;
+  preferenceSkillChars?: number;
+  jobCount?: number;
+};
+
+/** Build the offline review payload (no disk I/O). */
+export function buildSpikeRunLog(payload: SpikeRunLogPayload): SpikeRunLogBody {
   return {
-    fileName,
-    relativePath: path.join("outputs", "spike-runs", fileName).replace(/\\/gu, "/"),
+    ...payload,
+    kind: payload.kind ?? "resume",
+    jdText: payload.jdText ?? "",
+    resumeText: payload.resumeText ?? "",
+    jdChars: (payload.jdText ?? "").length,
+    resumeChars: (payload.resumeText ?? "").length,
+    preferenceSkillChars: payload.preferenceSkill?.length,
+    jobCount: payload.jobs?.length,
   };
+}
+
+/**
+ * Persist via Vite Node middleware — Workers VFS cannot write the project tree.
+ * Call from the browser after spike API returns.
+ */
+export async function persistSpikeRunLogFromBrowser(runLog: SpikeRunLogBody) {
+  const response = await fetch("/__dev/spike-run-log", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(runLog),
+  });
+  const payload = await response.json() as { relativePath?: string; error?: string };
+  if (!response.ok || !payload.relativePath) {
+    throw new Error(payload.error || "Spike run log persist failed");
+  }
+  return { relativePath: payload.relativePath };
 }

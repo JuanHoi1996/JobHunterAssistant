@@ -212,7 +212,7 @@ export async function POST(request: Request) {
       systemPrompt: BLUEPRINT_SYSTEM_PROMPT,
       userPrompt: `【岗位 JD】\n${jdText}\n\n【用户所选简历】\n${resumeText}`,
       schema: blueprintSchema,
-      maxOutputTokens: 3_200,
+      maxOutputTokens: 32_000,
     });
     if (!blueprintCompletion.outputText) throw new Error("AI returned no blueprint");
     const blueprint = validateResumeBlueprint(
@@ -226,7 +226,7 @@ export async function POST(request: Request) {
       systemPrompt: REWRITE_SYSTEM_PROMPT,
       userPrompt: `【岗位 JD】\n${jdText}\n\n【用户所选简历】\n${resumeText}\n\n【已校验分析蓝图】\n${JSON.stringify(blueprint)}`,
       schema: finalAnalysisSchema,
-      maxOutputTokens: 5_000,
+      maxOutputTokens: 64_000,
     });
     if (!rewriteCompletion.outputText) throw new Error("AI returned no rewrite output");
     const analysis = validateResumeAnalysis(

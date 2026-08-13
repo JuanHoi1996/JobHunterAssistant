@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { mergeGapAsks } from "../merge-gap-asks.js";
+import { persistSpikeRunLogFromBrowser, type SpikeRunLogBody } from "./run-log";
 import { placementSortRank } from "./experience-unit-analysis.js";
 import { extractResumeTextFromFile } from "./extract-resume-text";
+import { SpikeNav } from "./spike-nav";
 
 type ExperienceSuggestion = {
   title: string;
@@ -18,12 +21,19 @@ type ExperienceSuggestion = {
   qualityCheck: string;
 };
 
+type ExperienceOmit = {
+  title: string;
+  original: string;
+  reason: string;
+};
+
 type ExperienceAnalysis = {
   summary: string;
   matches: { title: string; resumeEvidence: string[]; jdEvidence: string; explanation: string }[];
   gaps: { title: string; jdEvidence: string; reason: string; question: string }[];
   questions: { question: string; why: string; jdEvidence: string }[];
   suggestions: ExperienceSuggestion[];
+  omit: ExperienceOmit[];
 };
 
 type AnalyzePayload = {
@@ -33,16 +43,16 @@ type AnalyzePayload = {
   provider?: string;
   model?: string;
   pipelineVersion?: string;
-  logPath?: string | null;
+  runLog?: SpikeRunLogBody;
 };
 
 function buildMarkdown(analysis: ExperienceAnalysis) {
   const lines = [
-    "# 经历级修改意见（测床实验）",
+    "# 投递版经历编排（测床实验）",
     "",
     analysis.summary ? `概要：${analysis.summary}` : "",
     "",
-    "卡片顺序 = 建议在简历中的前后位置（前置 → 建议拿下），不是修改紧急度。",
+    "以下卡片 = 建议放进本次投递版的经历（顺序：前置 → 后置）。「拿下」见 omit，不是卡片。",
     "",
   ];
   analysis.suggestions.forEach((item, index) => {
@@ -52,17 +62,25 @@ function buildMarkdown(analysis: ExperienceAnalysis) {
     lines.push("原经历块：");
     lines.push(item.original);
     lines.push("");
-    lines.push("建议经历块（可含取舍与 bullet 重排）：");
+    lines.push("投递版经历块：");
     lines.push(item.revised);
     lines.push("");
     if (item.reason) lines.push(`理由：${item.reason}`);
     lines.push("");
   });
-  if (analysis.gaps.length) {
-    lines.push("## 证据缺口");
-    analysis.gaps.forEach((gap) => {
-      lines.push(`- ${gap.title}：${gap.reason}`);
-      if (gap.question) lines.push(`  追问：${gap.question}`);
+  if (analysis.omit?.length) {
+    lines.push("## 本次建议不放（omit）");
+    analysis.omit.forEach((item) => {
+      lines.push(`- ${item.title}：${item.reason}`);
+    });
+    lines.push("");
+  }
+  const gapAsks = mergeGapAsks(analysis.gaps, analysis.questions);
+  if (gapAsks.length) {
+    lines.push("## 证据缺口与追问");
+    gapAsks.forEach((item) => {
+      lines.push(`- ${item.title}：${item.reason}`);
+      if (item.question) lines.push(`  追问：${item.question}`);
     });
   }
   return lines.filter((line) => line !== undefined).join("\n").trim();
@@ -97,6 +115,11 @@ export default function SpikeOpinionBedPage() {
       return leftRank - rightRank;
     });
   }, [analysis]);
+
+  const gapAsks = useMemo(
+    () => (analysis ? mergeGapAsks(analysis.gaps, analysis.questions) : []),
+    [analysis],
+  );
 
   const onPickResume = async (file: File | undefined) => {
     if (!file) return;
@@ -137,7 +160,14 @@ export default function SpikeOpinionBedPage() {
         }),
       });
       const payload = await response.json() as AnalyzePayload;
-      if (payload.logPath) setLogPath(payload.logPath);
+      if (payload.runLog) {
+        try {
+          const saved = await persistSpikeRunLogFromBrowser(payload.runLog);
+          setLogPath(saved.relativePath);
+        } catch (persistError) {
+          console.warn("Spike run log persist skipped", persistError);
+        }
+      }
       if (response.status === 401) {
         setSignInPath(payload.signInPath ?? "");
         setError(payload.error ?? "需要登录后才能分析（本地应配置 Key 并免登录）。");
@@ -153,7 +183,8 @@ export default function SpikeOpinionBedPage() {
         payload.pipelineVersion ?? "spike-experience",
         payload.provider && payload.model ? `${payload.provider} · ${payload.model}` : "",
         `耗时 ${seconds}s`,
-        `${next.suggestions.length} 段经历`,
+        `${next.suggestions.length} 段保留`,
+        `${next.omit?.length ?? 0} 段不放`,
       ].filter(Boolean).join(" · "));
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "分析暂时不可用。");
@@ -176,12 +207,13 @@ export default function SpikeOpinionBedPage() {
     <div className="spike-page">
       <header className="spike-header">
         <div>
-          <p className="spike-kicker">私人 UX 测床 · 经历级实验 0.2</p>
-          <h1>看 JD，出经历级意见</h1>
+          <p className="spike-kicker">私人 UX 测床 · 投递版编排 0.4</p>
+          <h1>看 JD，排出这次简历该长什么样</h1>
           <p className="spike-lead">
-            输入可以是「繁历」；输出由模型裁量留哪些、砍哪些、谁靠前。一张卡 = 一段任职；
-            块内 bullet 重排与压缩算措辞。不要求全覆盖，不要求段落守恒，不写回 Word。
+            输入可以是「繁历」；输出是本次投递版经历区：保留谁、谁靠前、块内怎么改。
+            「拿下」只进 omit 清单，不做经历卡。不要求全覆盖，不要求段落守恒，不写回 Word。
           </p>
+          <SpikeNav />
         </div>
         <Link className="secondary-button" href="/jobs">回主工作台</Link>
       </header>
@@ -234,7 +266,7 @@ export default function SpikeOpinionBedPage() {
 
       <div className="spike-actions">
         <button className="primary-button" type="button" disabled={!canAnalyze} onClick={() => void analyze()}>
-          {isAnalyzing ? "正在生成经历级意见（可能超过 1 分钟）…" : "生成经历级意见"}
+          {isAnalyzing ? "正在编排投递版经历（thinking-max，可能要好几分钟）…" : "生成投递版经历编排"}
         </button>
         {meta && <span className="spike-meta">{meta}</span>}
       </div>
@@ -251,7 +283,7 @@ export default function SpikeOpinionBedPage() {
           <span className="spike-spinner" aria-hidden="true" />
           <div>
             <strong>正在分析</strong>
-            <p>先建蓝图，再按任职经历出卡。通常需要一到两分钟，请勿重复点击。</p>
+            <p>先建蓝图，再按「投递版该留哪些经历」出卡。已开启 DeepSeek thinking-max，可能需要数分钟，请勿重复点击。</p>
           </div>
         </div>
       )}
@@ -269,10 +301,10 @@ export default function SpikeOpinionBedPage() {
         <section className="spike-results">
           <div className="spike-results-head">
             <div>
-              <h2>经历级意见</h2>
+              <h2>投递版经历区</h2>
               <p>
                 {analysis.summary
-                  || `${suggestionCount} 段经历；已按「前置 → 建议拿下」排序。块内取舍与 bullet 顺序见右侧建议稿。`}
+                  || `${suggestionCount} 段保留经历；已按「前置 → 后置」排序。拿下项见下方 omit。`}
               </p>
             </div>
             <button className="secondary-button" type="button" onClick={() => void copyMarkdown()}>
@@ -296,7 +328,7 @@ export default function SpikeOpinionBedPage() {
                     <p>{item.original}</p>
                   </div>
                   <div>
-                    <span>建议经历块</span>
+                    <span>投递版经历块</span>
                     <p>{item.revised}</p>
                   </div>
                 </div>
@@ -305,41 +337,51 @@ export default function SpikeOpinionBedPage() {
             ))}
             {!sortedSuggestions.length && (
               <p className="spike-hint">
-                本次没有通过校验的经历级建议（常见原因：original 未整段引用任职块）。可看下方缺口与追问。
+                本次没有通过校验的保留经历（常见原因：original 未整段引用任职块）。可看下方 omit 与缺口。
               </p>
             )}
           </div>
 
-          {(analysis.gaps.length > 0 || analysis.questions.length > 0) && (
-            <div className="spike-side-findings">
-              {analysis.gaps.length > 0 && (
-                <section className="card spike-panel">
-                  <h3>证据缺口</h3>
-                  <ul>
-                    {analysis.gaps.map((gap) => (
-                      <li key={`${gap.title}-${gap.jdEvidence}`}>
-                        <strong>{gap.title}</strong>
-                        <p>{gap.reason}</p>
-                        {gap.question && <small>追问：{gap.question}</small>}
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-              {analysis.questions.length > 0 && (
-                <section className="card spike-panel">
-                  <h3>追问</h3>
-                  <ul>
-                    {analysis.questions.map((item) => (
-                      <li key={item.question}>
-                        <strong>{item.question}</strong>
-                        <p>{item.why}</p>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-            </div>
+          {(analysis.omit?.length ?? 0) > 0 && (
+            <section className="card spike-panel spike-omit">
+              <h3>本次建议不放（omit）</h3>
+              <p className="spike-hint">这些经历建议别放进这次投递版；不是经历卡，也不会进入改简历主清单。</p>
+              <ul>
+                {analysis.omit.map((item) => {
+                  const preview = item.original.trim();
+                  const showPreview = preview
+                    && preview !== item.title.trim()
+                    && !item.title.trim().startsWith(preview)
+                    && preview.length > item.title.trim().length + 8;
+                  return (
+                    <li key={`${item.title}-${item.original.slice(0, 32)}`}>
+                      <strong>{item.title}</strong>
+                      <p>{item.reason}</p>
+                      {showPreview ? (
+                        <small>{preview.slice(0, 160)}{preview.length > 160 ? "…" : ""}</small>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
+
+          {gapAsks.length > 0 && (
+            <section className="card spike-panel spike-gap-asks">
+              <h3>证据缺口与追问</h3>
+              <p className="spike-hint">同一缺口只列一次：先看缺什么，再看要不要补一句事实。</p>
+              <ul>
+                {gapAsks.map((item) => (
+                  <li key={`${item.title}-${item.question || item.reason}`}>
+                    <strong>{item.title}</strong>
+                    <p>{item.reason}</p>
+                    {item.question ? <em>追问：{item.question}</em> : null}
+                    {item.jdEvidence ? <small>JD：“{item.jdEvidence}”</small> : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
         </section>
       )}

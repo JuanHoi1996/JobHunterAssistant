@@ -21,7 +21,9 @@ test("connects resume center, local storage and grounded job-specific versions",
   assert.match(panels, /开始两阶段 AI 分析/u);
   assert.match(panels, /JD 能力优先级/u);
   assert.match(panels, /原简历可放大的亮点/u);
-  assert.match(panels, /值得向你追问的信息/u);
+  assert.match(panels, /证据缺口与追问/u);
+  assert.match(panels, /mergeGapAsks/u);
+  assert.doesNotMatch(panels, /值得向你追问的信息/u);
   assert.match(panels, /完成修改并保存版本/u);
   assert.match(panels, /extractRawText/u);
   assert.match(panels, /saveResumeTemplate/u);
