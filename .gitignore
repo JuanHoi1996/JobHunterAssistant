@@ -37,6 +37,7 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 *.log
+/outputs/spike-runs/*.json
 
 # Deployment staging only; product source under work/ResumeFiller is tracked
 /work/site-source/

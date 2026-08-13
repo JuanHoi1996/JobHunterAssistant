@@ -15,7 +15,24 @@ export type JsonCompletionResult = {
   provider: AiProviderName;
   model: string;
   requestId?: string;
+  /** DeepSeek/OpenAI-style finish reason when available (e.g. stop | length). */
+  finishReason?: string;
 };
+
+/** Thrown when the model hit max_tokens and returned incomplete JSON. */
+export class AiTruncatedOutputError extends Error {
+  finishReason: string;
+  outputLength: number;
+
+  constructor(finishReason: string, outputLength: number) {
+    super(
+      `AI output truncated (finish_reason=${finishReason}, length=${outputLength}). Increase max_tokens or shorten the response.`,
+    );
+    this.name = "AiTruncatedOutputError";
+    this.finishReason = finishReason;
+    this.outputLength = outputLength;
+  }
+}
 
 export class AiUpstreamError extends Error {
   status: number;
@@ -44,6 +61,21 @@ export class AiConfigurationError extends Error {
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DEEPSEEK_CHAT_URL = "https://api.deepseek.com/chat/completions";
+/** Thinking-max resume calls are two sequential rounds; 10 minutes per call is a safer floor. */
+const DEFAULT_AI_REQUEST_TIMEOUT_MS = 600_000;
+
+/** Per-request timeout. Resume analysis is two sequential calls; thinking-max needs a long budget. */
+export const getAiRequestTimeoutMs = () => {
+  const configured = Number(process.env.AI_REQUEST_TIMEOUT_MS);
+  if (Number.isFinite(configured) && configured >= 10_000) return Math.floor(configured);
+  return DEFAULT_AI_REQUEST_TIMEOUT_MS;
+};
+
+const getDeepSeekReasoningEffort = (): "low" | "high" | "max" => {
+  const configured = (process.env.DEEPSEEK_REASONING_EFFORT || "max").trim().toLowerCase();
+  if (configured === "low" || configured === "high" || configured === "max") return configured;
+  return "max";
+};
 
 const providerFromEnvironment = (): AiProviderName => {
   const configured = (process.env.AI_PROVIDER || "deepseek").trim().toLowerCase();
@@ -95,15 +127,26 @@ const getOpenAiOutputText = (response: Record<string, unknown>) => {
   return "";
 };
 
-const getDeepSeekOutputText = (response: Record<string, unknown>) => {
+const getDeepSeekChoice = (response: Record<string, unknown>) => {
   const choices = Array.isArray(response.choices) ? response.choices : [];
   const firstChoice = choices[0];
-  if (!firstChoice || typeof firstChoice !== "object") return "";
-  const message = (firstChoice as { message?: unknown }).message;
+  if (!firstChoice || typeof firstChoice !== "object") return null;
+  return firstChoice as { message?: unknown; finish_reason?: unknown };
+};
+
+const getDeepSeekOutputText = (response: Record<string, unknown>) => {
+  const firstChoice = getDeepSeekChoice(response);
+  if (!firstChoice) return "";
+  const message = firstChoice.message;
   if (!message || typeof message !== "object") return "";
   return typeof (message as { content?: unknown }).content === "string"
     ? (message as { content: string }).content
     : "";
+};
+
+const getDeepSeekFinishReason = (response: Record<string, unknown>) => {
+  const reason = getDeepSeekChoice(response)?.finish_reason;
+  return typeof reason === "string" ? reason : undefined;
 };
 
 const deepSeekJsonSystemPrompt = (systemPrompt: string, schema: JsonSchema) => `${systemPrompt}
@@ -115,6 +158,7 @@ export async function completeJson(input: JsonCompletionInput): Promise<JsonComp
   const provider = providerFromEnvironment();
   const apiKey = provider === "deepseek" ? process.env.DEEPSEEK_API_KEY : process.env.OPENAI_API_KEY;
   if (!apiKey) throw new AiConfigurationError(`${provider} API key is not configured.`);
+  const timeoutMs = getAiRequestTimeoutMs();
 
   if (provider === "openai") {
     const response = await fetch(OPENAI_RESPONSES_URL, {
@@ -137,7 +181,7 @@ export async function completeJson(input: JsonCompletionInput): Promise<JsonComp
           },
         },
       }),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) {
       throw new AiUpstreamError(response.status, await readErrorPayload(response), response.headers.get("x-request-id") || undefined);
@@ -155,17 +199,32 @@ export async function completeJson(input: JsonCompletionInput): Promise<JsonComp
         { role: "system", content: deepSeekJsonSystemPrompt(input.systemPrompt, input.schema) },
         { role: "user", content: input.userPrompt },
       ],
-      thinking: { type: "disabled" },
+      // Thinking stays private in reasoning_content; final answer must still be JSON in content.
+      thinking: { type: "enabled" },
+      reasoning_effort: getDeepSeekReasoningEffort(),
       response_format: { type: "json_object" },
-      temperature: 0.1,
+      // Reasoning tokens count against max_tokens — keep this high enough for think + JSON.
       max_tokens: input.maxOutputTokens,
       stream: false,
     }),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!response.ok) {
     throw new AiUpstreamError(response.status, await readErrorPayload(response), response.headers.get("x-request-id") || undefined);
   }
   const payload = await response.json() as Record<string, unknown>;
-  return { outputText: getDeepSeekOutputText(payload), provider, model: input.model, requestId: response.headers.get("x-request-id") || undefined };
+  const outputText = getDeepSeekOutputText(payload);
+  const finishReason = getDeepSeekFinishReason(payload);
+  // DeepSeek JSON mode still truncates mid-object when max_tokens is hit (official docs warn about this).
+  // Thinking-max often burns the budget on reasoning_content and leaves content empty/partial.
+  if (finishReason === "length" || !outputText) {
+    throw new AiTruncatedOutputError(finishReason || "empty_content", outputText.length);
+  }
+  return {
+    outputText,
+    provider,
+    model: input.model,
+    requestId: response.headers.get("x-request-id") || undefined,
+    finishReason,
+  };
 }

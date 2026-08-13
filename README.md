@@ -68,6 +68,22 @@ pnpm build
 pnpm exec vinext dev -p 4000
 ```
 
+### 私人 UX 测床（`/spike`）
+
+贡献者个人验收路径丝滑度的极简页，**不进入主导航**，默认不当作主产品功能合并标准：
+
+- 打开：
+  - 简历编排 `http://localhost:3000/spike`
+  - 岗位排序 `http://localhost:3000/spike/rank`
+- 简历编排：JD 纯文本 + 简历 `.docx` / `.pdf` → 投递版经历卡（`suggestions` 保留 / `omit` 不放）
+- 岗位排序：上传专属择业 SKILL + 多选主站已收录岗位（可加临时 JD）→ 门控与效用分排序（`/api/spike/rank-jobs`）
+- 访谈协议：排序页可复制/下载 elicitation 协议；在外部 Agent 聊完后再把生成的 SKILL 贴回测床
+- 耗时：默认 DeepSeek **thinking-max**，常见约 **数分钟**；超时见 `AI_REQUEST_TIMEOUT_MS`（默认 600000）
+- 运行日志：`outputs/spike-runs/*.json`（含 `*-rank-*`）
+- 观察/提案：`docs/proposals/2026-08-06-spike-ux-bed-observations.md`、`docs/proposals/2026-08-07-spike-preference-job-rank.md`
+
+意见**质量**仍由产品负责人在主工作台验收；测床同时用于编排质量样本、择业排序与路径体验。
+
 Windows 说明：`package.json` 的脚本已避免 Unix 风格的 `VAR=value cmd`（该写法在 CMD/PowerShell 下会失败）。Wrangler 日志路径改在 `vite.config.ts` 中设置。请使用项目约定的 **pnpm** 工作流。
 
 ## AI runtime configuration
@@ -80,6 +96,8 @@ AI_PROVIDER=deepseek
 DEEPSEEK_API_KEY=your_key_here
 DEEPSEEK_JOB_MODEL=deepseek-v4-flash
 DEEPSEEK_RESUME_MODEL=deepseek-v4-pro
+AI_REQUEST_TIMEOUT_MS=600000
+DEEPSEEK_REASONING_EFFORT=max
 ```
 
 可选值 `AI_PROVIDER=openai` 仅用于显式迁移或调试；产品不会在一次请求中自动
